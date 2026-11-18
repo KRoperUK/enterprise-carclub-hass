@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections import Counter
+from typing import Any
+
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -21,6 +24,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         [
             EnterpriseCarClubReservationsSensor(coordinator, entry),
             EnterpriseCarClubMessagesSensor(coordinator, entry),
+            EnterpriseCarClubAvailableVehiclesSensor(coordinator, entry),
         ]
     )
 
@@ -41,12 +45,12 @@ class _BaseSensor(CoordinatorEntity[EnterpriseCarClubCoordinator], SensorEntity)
             "manufacturer": "Enterprise Car Club",
         }
 
-    def _count(self, field: str) -> int | None:
+    def _items(self, field: str) -> list[dict[str, Any]] | None:
         data = self.coordinator.data
         if not data:
             return None
         items = data.get(field)
-        return len(items) if isinstance(items, list) else None
+        return items if isinstance(items, list) else None
 
 
 class EnterpriseCarClubReservationsSensor(_BaseSensor):
@@ -62,7 +66,8 @@ class EnterpriseCarClubReservationsSensor(_BaseSensor):
     @property
     def native_value(self) -> int | None:
         """Return the reservation count."""
-        return self._count("reservations")
+        items = self._items("reservations")
+        return len(items) if items is not None else None
 
 
 class EnterpriseCarClubMessagesSensor(_BaseSensor):
@@ -78,4 +83,43 @@ class EnterpriseCarClubMessagesSensor(_BaseSensor):
     @property
     def native_value(self) -> int | None:
         """Return the message count."""
-        return self._count("messages")
+        items = self._items("messages")
+        return len(items) if items is not None else None
+
+
+class EnterpriseCarClubAvailableVehiclesSensor(_BaseSensor):
+    """Number of nearby vehicles currently showing good availability."""
+
+    _attr_name = "Available vehicles"
+    _attr_native_unit_of_measurement = "vehicles"
+
+    def __init__(self, coordinator: EnterpriseCarClubCoordinator, entry: ConfigEntry) -> None:
+        """Initialize."""
+        super().__init__(coordinator, entry, "vehicles")
+
+    def _available(self) -> list[dict[str, Any]] | None:
+        items = self._items("vehicles")
+        if items is None:
+            return None
+        return [v for v in items if isinstance(v, dict) and v.get("availability") == "good"]
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the available-vehicle count."""
+        available = self._available()
+        return len(available) if available is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Expose per-vehicle summaries plus size-class and fuel breakdowns."""
+        available = self._available()
+        if available is None:
+            return None
+        size_classes = Counter(v.get("size_class", "unknown") for v in available)
+        fuels = Counter(v.get("fuel", "unknown") for v in available)
+        return {
+            "vehicles": available,
+            "by_size_class": dict(size_classes),
+            "by_fuel": dict(fuels),
+            "search_params": (self.coordinator.data or {}).get("search_params"),
+        }

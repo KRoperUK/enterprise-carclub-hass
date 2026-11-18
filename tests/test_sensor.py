@@ -3,22 +3,20 @@
 from __future__ import annotations
 
 from custom_components.enterprise_carclub.sensor import (
+    EnterpriseCarClubAvailableVehiclesSensor,
     EnterpriseCarClubMessagesSensor,
     EnterpriseCarClubReservationsSensor,
 )
 
+from .conftest import VEHICLE
+
 
 def _build(sensor_cls, entry, data):
-    coordinator = _coordinator(data)
-    return sensor_cls(coordinator, entry)
-
-
-def _coordinator(data):
     from unittest.mock import MagicMock
 
     coordinator = MagicMock()
     coordinator.data = data
-    return coordinator
+    return sensor_cls(coordinator, entry)
 
 
 def test_reservations_sensor_reports_count(mock_config_entry) -> None:
@@ -41,6 +39,26 @@ def test_messages_sensor_reports_count(mock_config_entry) -> None:
     )
     assert sensor.native_value == 1
     assert sensor.unique_id.endswith("_messages")
+
+
+def test_available_vehicles_sensor_counts_good_only(mock_config_entry) -> None:
+    """Only stacks with good availability are counted."""
+    vehicles = [
+        dict(VEHICLE),
+        dict(VEHICLE, stack_id="other", availability="limited"),
+    ]
+    sensor = _build(
+        EnterpriseCarClubAvailableVehiclesSensor,
+        mock_config_entry,
+        {"reservations": [], "messages": [], "vehicles": vehicles},
+    )
+    assert sensor.native_value == 1
+    assert sensor.unique_id.endswith("_vehicles")
+    attributes = sensor.extra_state_attributes
+    assert attributes is not None
+    assert attributes["by_size_class"] == {"small": 1}
+    assert attributes["by_fuel"] == {"petrol": 1}
+    assert len(attributes["vehicles"]) == 1
 
 
 def test_unique_id_and_device_info(mock_config_entry) -> None:

@@ -13,6 +13,20 @@ from custom_components.enterprise_carclub.const import DOMAIN
 USERNAME = "10379619"
 PASSWORD = "secret"  # noqa: S105 — test-only credential
 
+VEHICLE = {
+    "stack_id": "53237",
+    "description": "#53237: MediaCityUK M50 2EQ - Peugeot 208",
+    "distance_m": 1221.6,
+    "make_model": "Peugeot 208",
+    "seats": 5,
+    "fuel": "petrol",
+    "transmission": "manual",
+    "size_class": "small",
+    "availability": "good",
+    "next_free_time": "2026-11-18T20:00:00+00:00",
+    "timeslots": [{"time": "2026-11-18T20:00:00+00:00", "available": True}],
+}
+
 
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations: Any) -> Any:
@@ -30,6 +44,7 @@ def mock_config_entry() -> MockConfigEntry:
     return MockConfigEntry(
         domain=DOMAIN,
         data={CONF_USERNAME: USERNAME, CONF_PASSWORD: PASSWORD},
+        options={},
         unique_id=USERNAME,
         title=f"Enterprise Car Club ({USERNAME})",
     )
