@@ -63,6 +63,31 @@ class EnterpriseCarClubConfigFlow(ConfigFlow, domain=DOMAIN):
         """Return the options flow."""
         return EnterpriseCarClubOptionsFlow(config_entry)
 
+    async def async_step_reauth(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Handle re-authentication when the stored password stops working."""
+        errors: dict[str, str] = {}
+        entry = self._get_reauth_entry()
+        if user_input is not None:
+            password = user_input[CONF_PASSWORD]
+            client = Client(async_get_clientsession(self.hass))
+            try:
+                await client.async_login(entry.data[CONF_USERNAME], password)
+            except AuthError:
+                errors["base"] = "invalid_auth"
+            except ClientError:
+                errors["base"] = "cannot_connect"
+            except Exception:  # noqa: BLE001 — surface unexpected failures as unknown
+                errors["base"] = "unknown"
+            else:
+                return self.async_update_reload_and_abort(entry, data={**entry.data, CONF_PASSWORD: password})
+
+        return self.async_show_form(
+            step_id="reauth",
+            data_schema=vol.Schema({vol.Required(CONF_PASSWORD): str}),
+            description_placeholders={"username": entry.data[CONF_USERNAME]},
+            errors=errors,
+        )
+
 
 class EnterpriseCarClubOptionsFlow(OptionsFlow):
     """Handle options: search area, window, market and favorite vehicles."""

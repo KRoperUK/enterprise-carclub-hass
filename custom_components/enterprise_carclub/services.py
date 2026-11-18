@@ -14,6 +14,16 @@ from .const import DOMAIN
 from .coordinator import EnterpriseCarClubCoordinator, isoformat_epoch
 
 SERVICE_CHECK_AVAILABILITY = "check_availability"
+SERVICE_BOOK_VEHICLE = "book_vehicle"
+
+SERVICE_BOOK_SCHEMA = vol.Schema(
+    {
+        vol.Required("stack_id"): str,
+        vol.Required("start"): cv.datetime,
+        vol.Required("end"): cv.datetime,
+        vol.Optional("memo", default=""): str,
+    }
+)
 
 SERVICE_CHECK_SCHEMA = vol.Schema(
     {
@@ -31,7 +41,9 @@ def async_register_services(hass: HomeAssistant) -> None:
         return
     hass.data[DOMAIN] = True
 
-    async def handle_check_availability(call: ServiceCall) -> dict[str, Any]:
+    async def _get_client() -> tuple[EnterpriseCarClubCoordinator, Any]:
+        from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+
         coordinator: EnterpriseCarClubCoordinator | None = None
         for entry in hass.config_entries.async_entries(DOMAIN):
             runtime_data = getattr(entry, "runtime_data", None)
@@ -40,15 +52,16 @@ def async_register_services(hass: HomeAssistant) -> None:
                 break
         if coordinator is None:
             raise HomeAssistantError("Enterprise Car Club is not set up")
-
-        from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
-
         client = coordinator._get_client()
         if client.token is None:
             await client.async_login(
                 coordinator.entry.data[CONF_USERNAME],
                 coordinator.entry.data[CONF_PASSWORD],
             )
+        return coordinator, client
+
+    async def handle_check_availability(call: ServiceCall) -> dict[str, Any]:
+        _, client = await _get_client()
         start: datetime = call.data["start"]
         end: datetime = call.data["end"]
         slots = await client.async_get_stack_timeslots(
@@ -67,10 +80,36 @@ def async_register_services(hass: HomeAssistant) -> None:
             ],
         }
 
+    async def handle_book_vehicle(call: ServiceCall) -> dict[str, Any]:
+        _, client = await _get_client()
+        start: datetime = call.data["start"]
+        end: datetime = call.data["end"]
+        reservation = await client.async_make_reservation(
+            call.data["stack_id"],
+            start_time=int(start.timestamp()),
+            end_time=int(end.timestamp()),
+            memo=call.data.get("memo", ""),
+        )
+        estimate = reservation.get("estimate_unformatted") or {}
+        amount = estimate.get("currency_amount") if isinstance(estimate, dict) else None
+        return {
+            "reservation_id": reservation.get("id"),
+            "status": reservation.get("status"),
+            "total": (amount or {}).get("value") if isinstance(amount, dict) else None,
+            "currency": (amount or {}).get("currency_code") if isinstance(amount, dict) else None,
+        }
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_CHECK_AVAILABILITY,
         handle_check_availability,
         schema=SERVICE_CHECK_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_BOOK_VEHICLE,
+        handle_book_vehicle,
+        schema=SERVICE_BOOK_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
