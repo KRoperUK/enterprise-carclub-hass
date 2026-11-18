@@ -73,6 +73,15 @@ class EnterpriseCarClubVehicleTracker(CoordinatorEntity[EnterpriseCarClubCoordin
         lon = vehicle.get("longitude") if vehicle else None
         return lon if isinstance(lon, (int, float)) else None
 
+    @property
+    def entity_picture(self) -> str | None:
+        """Return the vehicle preview photo for the map view."""
+        vehicle = self._vehicle()
+        if not vehicle:
+            return None
+        thumb = vehicle.get("thumb_url")
+        return thumb if isinstance(thumb, str) and thumb.startswith("http") else None
+
     @staticmethod
     def _battery_level(vehicle: dict[str, Any]) -> int | None:
         """Return the EV battery percentage when reported."""

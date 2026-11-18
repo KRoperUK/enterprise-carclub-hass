@@ -39,3 +39,21 @@ def test_tracker_attributes_for_booking(mock_config_entry) -> None:
     assert attributes is not None
     assert attributes["size_class"] == "small"
     assert attributes["availability"] == "good"
+
+
+def test_tracker_exposes_preview_photo(mock_config_entry) -> None:
+    """The tracker surfaces the vehicle thumbnail for the map view."""
+    from .conftest import VEHICLE
+
+    vehicle = dict(
+        VEHICLE,
+        thumb_url="https://booking.citycarclub.co.uk//images/client_images/vehicle_thumb_1.png",
+    )
+    tracker = _tracker(mock_config_entry, {"vehicles": [vehicle]})
+    assert tracker.entity_picture == vehicle["thumb_url"]
+
+
+def test_tracker_picture_missing_without_thumbnail(mock_config_entry) -> None:
+    """No thumbnail means no picture, not a broken image."""
+    tracker = _tracker(mock_config_entry, {"vehicles": [dict(VEHICLE)]})
+    assert tracker.entity_picture is None

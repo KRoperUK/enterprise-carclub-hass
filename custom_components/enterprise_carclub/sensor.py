@@ -56,7 +56,7 @@ class _BaseSensor(CoordinatorEntity[EnterpriseCarClubCoordinator], SensorEntity)
 class EnterpriseCarClubReservationsSensor(_BaseSensor):
     """Number of upcoming reservations on the account."""
 
-    _attr_name = "Upcoming reservations"
+    _attr_translation_key = "upcoming_reservations"
     _attr_native_unit_of_measurement = "reservations"
 
     def __init__(self, coordinator: EnterpriseCarClubCoordinator, entry: ConfigEntry) -> None:
@@ -115,7 +115,7 @@ class EnterpriseCarClubReservationsSensor(_BaseSensor):
 class EnterpriseCarClubMessagesSensor(_BaseSensor):
     """Number of driver inbox messages."""
 
-    _attr_name = "Driver messages"
+    _attr_translation_key = "driver_messages"
     _attr_native_unit_of_measurement = "messages"
 
     def __init__(self, coordinator: EnterpriseCarClubCoordinator, entry: ConfigEntry) -> None:
@@ -132,7 +132,7 @@ class EnterpriseCarClubMessagesSensor(_BaseSensor):
 class EnterpriseCarClubAvailableVehiclesSensor(_BaseSensor):
     """Number of nearby vehicles currently showing good availability."""
 
-    _attr_name = "Available vehicles"
+    _attr_translation_key = "available_vehicles"
     _attr_native_unit_of_measurement = "vehicles"
 
     def __init__(self, coordinator: EnterpriseCarClubCoordinator, entry: ConfigEntry) -> None:
