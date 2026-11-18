@@ -36,15 +36,13 @@ class EnterpriseCarClubVehicleTracker(CoordinatorEntity[EnterpriseCarClubCoordin
     _attr_has_entity_name = True
     _attr_source_type = SourceType.GPS
 
-    def __init__(
-        self, coordinator: EnterpriseCarClubCoordinator, entry: ConfigEntry, vehicle: dict[str, Any]
-    ) -> None:
+    def __init__(self, coordinator: EnterpriseCarClubCoordinator, entry: ConfigEntry, vehicle: dict[str, Any]) -> None:
         """Initialize."""
         super().__init__(coordinator)
         self._stack_id = vehicle["stack_id"]
         self._attr_unique_id = f"{entry.unique_id}_stack_{self._stack_id}"
         self._attr_name = vehicle.get("description") or f"Vehicle {self._stack_id}"
-        self._attr_device_info: dict[str, Any] = {
+        self._attr_device_info = {  # type: ignore[assignment]
             "identifiers": {(DOMAIN, f"stack_{self._stack_id}")},
             "name": vehicle.get("description") or f"Vehicle {self._stack_id}",
             "manufacturer": "Enterprise Car Club",
