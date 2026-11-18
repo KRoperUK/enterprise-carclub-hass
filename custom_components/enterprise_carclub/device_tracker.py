@@ -78,7 +78,7 @@ class EnterpriseCarClubVehicleTracker(CoordinatorEntity[EnterpriseCarClubCoordin
         """Return the EV battery percentage when reported."""
         try:
             return int(str(vehicle.get("battery_level")))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return None
 
     @property
