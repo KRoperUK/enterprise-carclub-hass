@@ -80,3 +80,45 @@ def test_no_data_returns_none(mock_config_entry) -> None:
     """Missing coordinator data renders as unknown, not zero."""
     sensor = _build(EnterpriseCarClubReservationsSensor, mock_config_entry, None)
     assert sensor.native_value is None
+
+
+def test_reservations_sensor_exposes_next_booking(mock_config_entry) -> None:
+    """The soonest reservation surfaces with vehicle and cost details."""
+    from .conftest import VEHICLE
+
+    reservation = {
+        "id": "14566233",
+        "status": "normal",
+        "start_timestamp": 1795107600,
+        "end_timestamp": 1795122000,
+        "estimate_unformatted": {"currency_amount": {"currency_code": "GBP", "value": 33.98}},
+        "vehicle_stack": dict(
+            VEHICLE,
+            make_model="Ford Transit Custom EV",
+            lot_description="Blossom Street, Ancoats, M4 6AJ",
+            vehicle_details={"plate": "WO25 DUH"},
+        ),
+    }
+    sensor = _build(
+        EnterpriseCarClubReservationsSensor,
+        mock_config_entry,
+        {"reservations": [reservation], "messages": []},
+    )
+    assert sensor.native_value == 1
+    details = sensor.extra_state_attributes
+    assert details is not None
+    nxt = details["next_reservation"]
+    assert nxt["id"] == "14566233"
+    assert nxt["make_model"] == "Ford Transit Custom EV"
+    assert nxt["location"] == "Blossom Street, Ancoats, M4 6AJ"
+    assert nxt["plate"] == "WO25 DUH"
+    assert nxt["total"] == 33.98
+    assert nxt["currency"] == "GBP"
+    assert nxt["start"].startswith("2026-")
+
+
+def test_reservations_sensor_empty_state(mock_config_entry) -> None:
+    """No bookings renders an explicit empty next reservation."""
+    sensor = _build(EnterpriseCarClubReservationsSensor, mock_config_entry, {"reservations": [], "messages": []})
+    assert sensor.native_value == 0
+    assert sensor.extra_state_attributes == {"next_reservation": None}
