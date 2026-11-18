@@ -1,0 +1,7 @@
+{
+  "name": "Enterprise Car Club",
+  "filename": "enterprise_carclub.zip",
+  "zip_release": true,
+  "render_readme": true,
+  "homeassistant": "2026.8.0"
+}

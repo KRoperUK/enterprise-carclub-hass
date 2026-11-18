@@ -1,0 +1,20 @@
+{
+  "domain": "enterprise_carclub",
+  "name": "Enterprise Car Club",
+  "codeowners": [
+    "@KRoperUK"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/KRoperUK/enterprise-carclub-hass",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/KRoperUK/enterprise-carclub-hass/issues",
+  "loggers": [
+    "enterprise_carclub"
+  ],
+  "quality_scale": "bronze",
+  "requirements": [
+    "enterprise-carclub==0.1.0"
+  ],
+  "version": "0.1.0"
+}
