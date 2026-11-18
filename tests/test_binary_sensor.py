@@ -43,9 +43,9 @@ def test_friendly_name_uses_model_and_stack_id(mock_config_entry) -> None:
     """The friendly name reads like ``Peugeot 208 (#53237)``."""
     sensor = _build(
         mock_config_entry,
-        {"vehicles": [dict(VEHICLE, make_model="Peugeot 208")]},
+        {"vehicles": [dict(VEHICLE, make_model="Peugeot 208", lot_description="MediaCityUK M50 2EQ")]},
     )
-    assert sensor.name == "Peugeot 208 (#53237)"
+    assert sensor.name == "Peugeot 208, MediaCityUK M50 2EQ (53237)"
 
 
 def test_friendly_name_falls_back_without_vehicle(mock_config_entry) -> None:

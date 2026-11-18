@@ -11,6 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .binary_sensor import vehicle_display_name
 from .const import DOMAIN
 from .coordinator import EnterpriseCarClubCoordinator
 
@@ -41,7 +42,7 @@ class EnterpriseCarClubVehicleTracker(CoordinatorEntity[EnterpriseCarClubCoordin
         super().__init__(coordinator)
         self._stack_id = vehicle["stack_id"]
         self._attr_unique_id = f"{entry.unique_id}_stack_{self._stack_id}"
-        self._attr_name = vehicle.get("description") or f"Vehicle {self._stack_id}"
+        self._attr_name = vehicle_display_name(vehicle, self._stack_id)
         self._attr_device_info = {  # type: ignore[assignment]
             "identifiers": {(DOMAIN, f"stack_{self._stack_id}")},
             "name": vehicle.get("description") or f"Vehicle {self._stack_id}",
