@@ -24,7 +24,10 @@ VEHICLE = {
     "size_class": "small",
     "availability": "good",
     "next_free_time": "2026-11-18T20:00:00+00:00",
-    "timeslots": [{"time": "2026-11-18T20:00:00+00:00", "available": True}],
+    "timeslots": [
+        {"time": "2026-11-18T20:00:00+00:00", "available": True},
+        {"time": "2026-11-18T20:15:00+00:00", "available": False},
+    ],
 }
 
 

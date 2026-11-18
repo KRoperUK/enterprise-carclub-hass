@@ -16,6 +16,17 @@ from .coordinator import EnterpriseCarClubCoordinator
 PARALLEL_UPDATES = 0
 
 
+def vehicle_display_name(vehicle: dict[str, Any], stack_id: str) -> str:
+    """Friendly name like ``Peugeot 208, MediaCityUK M50 2EQ (53237)``."""
+    make_model = vehicle.get("make_model")
+    lot = vehicle.get("lot_description") or vehicle.get("description")
+    if isinstance(make_model, str) and isinstance(lot, str) and lot:
+        return f"{make_model}, {lot} ({stack_id})"
+    if isinstance(make_model, str):
+        return f"{make_model} ({stack_id})"
+    return f"Favorite {stack_id}"
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Set up one availability sensor per favorite vehicle."""
     coordinator: EnterpriseCarClubCoordinator = entry.runtime_data
@@ -35,12 +46,19 @@ class EnterpriseCarClubFavoriteAvailableSensor(CoordinatorEntity[EnterpriseCarCl
         super().__init__(coordinator)
         self._stack_id = stack_id
         self._attr_unique_id = f"{entry.unique_id}_fav_{stack_id}"
-        self._attr_name = f"Favorite {stack_id} available"
+        self._attr_name = self._display_name()
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.unique_id or entry.entry_id)},
             "name": entry.title,
             "manufacturer": "Enterprise Car Club",
         }
+
+    def _display_name(self) -> str:
+        """Friendly name like ``Peugeot 208, MediaCityUK M50 2EQ (53237)``."""
+        vehicle = self._vehicle()
+        if vehicle is not None:
+            return vehicle_display_name(vehicle, self._stack_id)
+        return f"Favorite {self._stack_id}"
 
     def _vehicle(self) -> dict[str, Any] | None:
         data = self.coordinator.data

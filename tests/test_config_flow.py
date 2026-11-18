@@ -96,3 +96,27 @@ async def test_duplicate_username_aborts(hass, mock_config_entry) -> None:
 
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "already_configured"
+
+
+async def test_reauth_updates_password(hass, mock_config_entry) -> None:
+    """Re-auth validates the new password and updates the entry."""
+    from enterprise_carclub import LoginResult
+
+    mock_config_entry.add_to_hass(hass)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "reauth", "entry_id": mock_config_entry.entry_id}
+    )
+    assert result["type"] == FlowResultType.FORM
+
+    with patch(FLOW_CLIENT) as mock_client_cls:
+        mock_client_cls.return_value.async_login = AsyncMock(
+            return_value=LoginResult(authorization_token="new-tok", member_id=USERNAME, driver_name="T", market_id=8)
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={CONF_PASSWORD: "new-secret"},
+        )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert mock_config_entry.data[CONF_PASSWORD] == "new-secret"

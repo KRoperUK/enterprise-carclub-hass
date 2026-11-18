@@ -10,12 +10,22 @@ Cloud polling (`iot_class: cloud_polling`), HACS-installable.
 
 ## Status
 
-Scaffolded from the team blueprint (same CI/release discipline as
+Built on [enterprise-carclub-py](https://github.com/KRoperUK/enterprise-carclub-py)
+(same CI/release discipline as
 [dimplex-controller-hass](https://github.com/KRoperUK/dimplex-controller-hass)
-and [sungrow-hass](https://github.com/KRoperUK/sungrow-hass)). Entity
-platforms currently carry a placeholder power sensor — reservation/trip/vehicle
-entities land once the client library implements auth + reservations (tracked
-in the lib repo).
+and [sungrow-hass](https://github.com/KRoperUK/sungrow-hass)).
+
+- **Sensors**: upcoming-reservation count (next booking's id, times, vehicle,
+  plate and cost as attributes), driver-message count, nearby available
+  vehicles (per-vehicle distance, size class, fuel, seats, next free slot).
+- **Binary sensors**: one per favorite vehicle (picked in Configure), on when
+  availability is good.
+- **Device trackers**: every nearby vehicle plotted on the map with bay
+  location and EV battery where reported.
+- **Services**: `check_availability` (timeslots for any stack and future
+  window) and `book_vehicle` (creates a real, chargeable reservation).
+- **Options**: search location (defaults to home), window hours, market, and
+  the favorites list.
 
 ## Install (HACS)
 

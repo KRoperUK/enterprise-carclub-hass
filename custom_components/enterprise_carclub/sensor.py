@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import EnterpriseCarClubCoordinator
+from .coordinator import EnterpriseCarClubCoordinator, isoformat_epoch
 
 PARALLEL_UPDATES = 0
 
@@ -69,6 +69,48 @@ class EnterpriseCarClubReservationsSensor(_BaseSensor):
         items = self._items("reservations")
         return len(items) if items is not None else None
 
+    @staticmethod
+    def _reservation_start(reservation: dict[str, Any]) -> int:
+        start = reservation.get("start_timestamp")
+        return start if isinstance(start, int) else 0
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Expose the soonest upcoming reservation with vehicle and cost."""
+        items = self._items("reservations")
+        if not items:
+            return None if items is None else {"next_reservation": None}
+        upcoming = sorted(
+            (r for r in items if isinstance(r, dict)),
+            key=EnterpriseCarClubReservationsSensor._reservation_start,
+        )
+        if not upcoming:
+            return {"next_reservation": None}
+        first = upcoming[0]
+        raw_stack = first.get("vehicle_stack")
+        stack: dict[str, Any] = raw_stack if isinstance(raw_stack, dict) else {}
+        raw_estimate = first.get("estimate_unformatted")
+        estimate: dict[str, Any] = raw_estimate if isinstance(raw_estimate, dict) else {}
+        raw_amount = estimate.get("currency_amount")
+        amount: dict[str, Any] = raw_amount if isinstance(raw_amount, dict) else {}
+        raw_details = stack.get("vehicle_details")
+        details: dict[str, Any] = raw_details if isinstance(raw_details, dict) else {}
+        start = first.get("start_timestamp")
+        end = first.get("end_timestamp")
+        return {
+            "next_reservation": {
+                "id": first.get("id"),
+                "status": first.get("status"),
+                "start": isoformat_epoch(start) if isinstance(start, int) else start,
+                "end": isoformat_epoch(end) if isinstance(end, int) else end,
+                "make_model": stack.get("make_model"),
+                "location": stack.get("lot_description"),
+                "plate": details.get("plate"),
+                "total": amount.get("value"),
+                "currency": amount.get("currency_code"),
+            }
+        }
+
 
 class EnterpriseCarClubMessagesSensor(_BaseSensor):
     """Number of driver inbox messages."""
@@ -111,14 +153,26 @@ class EnterpriseCarClubAvailableVehiclesSensor(_BaseSensor):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Expose per-vehicle summaries plus size-class and fuel breakdowns."""
+        """Expose per-vehicle summaries plus size-class and fuel breakdowns.
+
+        Full timeslot lists stay out of state attributes (recorder 16 kB
+        limit) — use the ``check_availability`` service for schedules.
+        """
         available = self._available()
         if available is None:
             return None
         size_classes = Counter(v.get("size_class", "unknown") for v in available)
         fuels = Counter(v.get("fuel", "unknown") for v in available)
+        vehicles = []
+        for vehicle in available:
+            summary = {k: v for k, v in vehicle.items() if k != "timeslots"}
+            slots = vehicle.get("timeslots")
+            if isinstance(slots, list):
+                summary["slot_count"] = len(slots)
+                summary["free_slot_count"] = sum(1 for s in slots if isinstance(s, dict) and s.get("available"))
+            vehicles.append(summary)
         return {
-            "vehicles": available,
+            "vehicles": vehicles,
             "by_size_class": dict(size_classes),
             "by_fuel": dict(fuels),
             "search_params": (self.coordinator.data or {}).get("search_params"),
