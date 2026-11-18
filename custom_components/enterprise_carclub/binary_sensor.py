@@ -35,12 +35,19 @@ class EnterpriseCarClubFavoriteAvailableSensor(CoordinatorEntity[EnterpriseCarCl
         super().__init__(coordinator)
         self._stack_id = stack_id
         self._attr_unique_id = f"{entry.unique_id}_fav_{stack_id}"
-        self._attr_name = f"Favorite {stack_id} available"
+        self._attr_name = self._display_name()
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.unique_id or entry.entry_id)},
             "name": entry.title,
             "manufacturer": "Enterprise Car Club",
         }
+
+    def _display_name(self) -> str:
+        """Friendly name from the vehicle model, e.g. ``Transit Custom EV (#54978)``."""
+        vehicle = self._vehicle()
+        if vehicle and isinstance(vehicle.get("make_model"), str):
+            return f"{vehicle['make_model']} (#{self._stack_id})"
+        return f"Favorite {self._stack_id}"
 
     def _vehicle(self) -> dict[str, Any] | None:
         data = self.coordinator.data
