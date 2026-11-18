@@ -40,6 +40,7 @@ async def test_setup_and_unload(hass: HomeAssistant, mock_config_entry: MockConf
         assert states == ["0", "1", "1"]
 
         assert hass.states.async_entity_ids("binary_sensor") == []
+        assert hass.states.async_entity_ids("device_tracker") == []
 
         assert await hass.config_entries.async_unload(mock_config_entry.entry_id)
         await hass.async_block_till_done()

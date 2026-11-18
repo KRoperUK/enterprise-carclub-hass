@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 
 from .coordinator import EnterpriseCarClubCoordinator
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.DEVICE_TRACKER]
 
 type EnterpriseCarClubConfigEntry = ConfigEntry[EnterpriseCarClubCoordinator]
 
