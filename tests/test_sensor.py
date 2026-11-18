@@ -59,6 +59,9 @@ def test_available_vehicles_sensor_counts_good_only(mock_config_entry) -> None:
     assert attributes["by_size_class"] == {"small": 1}
     assert attributes["by_fuel"] == {"petrol": 1}
     assert len(attributes["vehicles"]) == 1
+    assert "timeslots" not in attributes["vehicles"][0]
+    assert attributes["vehicles"][0]["slot_count"] == 2
+    assert attributes["vehicles"][0]["free_slot_count"] == 1
 
 
 def test_unique_id_and_device_info(mock_config_entry) -> None:

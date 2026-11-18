@@ -111,14 +111,26 @@ class EnterpriseCarClubAvailableVehiclesSensor(_BaseSensor):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Expose per-vehicle summaries plus size-class and fuel breakdowns."""
+        """Expose per-vehicle summaries plus size-class and fuel breakdowns.
+
+        Full timeslot lists stay out of state attributes (recorder 16 kB
+        limit) — use the ``check_availability`` service for schedules.
+        """
         available = self._available()
         if available is None:
             return None
         size_classes = Counter(v.get("size_class", "unknown") for v in available)
         fuels = Counter(v.get("fuel", "unknown") for v in available)
+        vehicles = []
+        for vehicle in available:
+            summary = {k: v for k, v in vehicle.items() if k != "timeslots"}
+            slots = vehicle.get("timeslots")
+            if isinstance(slots, list):
+                summary["slot_count"] = len(slots)
+                summary["free_slot_count"] = sum(1 for s in slots if isinstance(s, dict) and s.get("available"))
+            vehicles.append(summary)
         return {
-            "vehicles": available,
+            "vehicles": vehicles,
             "by_size_class": dict(size_classes),
             "by_fuel": dict(fuels),
             "search_params": (self.coordinator.data or {}).get("search_params"),
