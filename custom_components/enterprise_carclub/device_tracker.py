@@ -73,15 +73,12 @@ class EnterpriseCarClubVehicleTracker(CoordinatorEntity[EnterpriseCarClubCoordin
         lon = vehicle.get("longitude") if vehicle else None
         return lon if isinstance(lon, (int, float)) else None
 
-    @property
-    def battery_level(self) -> int | None:
+    @staticmethod
+    def _battery_level(vehicle: dict[str, Any]) -> int | None:
         """Return the EV battery percentage when reported."""
-        vehicle = self._vehicle()
-        if not vehicle:
-            return None
         try:
             return int(str(vehicle.get("battery_level")))
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             return None
 
     @property
@@ -92,6 +89,7 @@ class EnterpriseCarClubVehicleTracker(CoordinatorEntity[EnterpriseCarClubCoordin
             return {"stack_id": self._stack_id, "present": False}
         return {
             "stack_id": vehicle.get("stack_id"),
+            "battery_level": self._battery_level(vehicle),
             "size_class": vehicle.get("size_class"),
             "fuel": vehicle.get("fuel"),
             "seats": vehicle.get("seats"),
