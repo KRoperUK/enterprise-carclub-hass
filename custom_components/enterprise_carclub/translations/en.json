@@ -15,23 +15,23 @@
       "invalid_auth": "Invalid member ID or password",
       "unknown": "Unexpected error"
     },
-    "options": {
-      "step": {
-        "init": {
-          "title": "Search and favorites",
-          "description": "Where to search, how far ahead to look, and which vehicles to watch as favorites.",
-          "data": {
-            "latitude": "Search latitude",
-            "longitude": "Search longitude",
-            "window_hours": "Search window (hours)",
-            "market_id": "Market ID",
-            "favorite_stack_ids": "Favorite vehicles"
-          }
-        }
-      }
-    },
     "abort": {
       "already_configured": "Account is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Search and favorites",
+        "description": "Where to search, how far ahead to look, and which vehicles to watch as favorites.",
+        "data": {
+          "latitude": "Search latitude",
+          "longitude": "Search longitude",
+          "window_hours": "Search window (hours)",
+          "market_id": "Market ID",
+          "favorite_stack_ids": "Favorite vehicles"
+        }
+      }
     }
   }
 }
