@@ -13,7 +13,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import CONF_FAVORITE_STACK_IDS, DOMAIN
 from .coordinator import EnterpriseCarClubCoordinator
 
-PARALLEL_UPDATES = 0
+PARALLEL_UPDATES = 1
 
 
 def vehicle_display_name(vehicle: dict[str, Any], stack_id: str) -> str:

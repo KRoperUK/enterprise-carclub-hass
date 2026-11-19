@@ -50,5 +50,34 @@ def test_friendly_name_uses_model_and_stack_id(mock_config_entry) -> None:
 
 def test_friendly_name_falls_back_without_vehicle(mock_config_entry) -> None:
     """Without search data the name falls back to the stack id."""
-    sensor = _build(mock_config_entry, {"vehicles": []})
+    sensor = _build(mock_config_entry, None)
     assert sensor.name == "Favorite 53237"
+
+
+def test_display_name_without_location(mock_config_entry) -> None:
+    """A vehicle without location details still names the model."""
+    from custom_components.enterprise_carclub.binary_sensor import vehicle_display_name
+
+    assert vehicle_display_name({"make_model": "Peugeot 208"}, "1") == "Peugeot 208 (1)"
+    assert vehicle_display_name({}, "2") == "Favorite 2"
+
+
+async def test_setup_creates_one_entity_per_favorite(hass, mock_config_entry) -> None:
+    """Setup adds a binary sensor for each favorite stack id."""
+    from custom_components.enterprise_carclub import binary_sensor as binary_sensor_module
+
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(mock_config_entry, options={"favorite_stack_ids": ["53237", "54978"]})
+    mock_config_entry.runtime_data = MagicMock()
+    mock_config_entry.runtime_data.data = {"vehicles": []}
+    added: list = []
+
+    def capture(entities: list) -> None:
+        added.extend(entities)
+
+    await binary_sensor_module.async_setup_entry(hass, mock_config_entry, capture)
+    assert len(added) == 2
+    assert {entity.unique_id for entity in added} == {
+        f"{mock_config_entry.unique_id}_fav_53237",
+        f"{mock_config_entry.unique_id}_fav_54978",
+    }

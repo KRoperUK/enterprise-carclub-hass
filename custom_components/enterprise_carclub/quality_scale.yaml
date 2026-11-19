@@ -1,4 +1,7 @@
 rules:
   config-flow: done
   entity-unique-id: done
+  reauthentication-flow: done
+  action-setup: done
+  diagnostics: done
   # Expand toward gold/platinum as the product integration matures.

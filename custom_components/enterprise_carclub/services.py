@@ -35,8 +35,8 @@ SERVICE_CHECK_SCHEMA = vol.Schema(
 
 
 @callback
-def async_register_services(hass: HomeAssistant) -> None:
-    """Register integration services (once per HA instance)."""
+def async_setup_services(hass: HomeAssistant) -> None:
+    """Register integration services (called once from async_setup)."""
     if hass.data.get(DOMAIN):
         return
     hass.data[DOMAIN] = True

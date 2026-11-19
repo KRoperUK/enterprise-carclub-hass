@@ -120,3 +120,45 @@ async def test_reauth_updates_password(hass, mock_config_entry) -> None:
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "reauth_successful"
     assert mock_config_entry.data[CONF_PASSWORD] == "new-secret"
+
+
+async def test_unexpected_error_surfaces_unknown(hass) -> None:
+    """Unexpected API failures surface as unknown, not a crash."""
+    result = await _start(hass)
+
+    with patch(FLOW_CLIENT) as mock_client_cls:
+        mock_client_cls.return_value.async_login = AsyncMock(side_effect=RuntimeError("boom"))
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={CONF_USERNAME: USERNAME, CONF_PASSWORD: PASSWORD},
+        )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "unknown"}
+
+
+async def test_reauth_connection_failure_stays_on_form(hass, mock_config_entry) -> None:
+    """Re-auth maps connectivity and unexpected failures distinctly."""
+    mock_config_entry.add_to_hass(hass)
+    for side_effect, expected in ((ClientError("down"), "cannot_connect"), (RuntimeError("boom"), "unknown")):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "reauth", "entry_id": mock_config_entry.entry_id}
+        )
+        with patch(FLOW_CLIENT) as mock_client_cls:
+            mock_client_cls.return_value.async_login = AsyncMock(side_effect=side_effect)
+            result = await hass.config_entries.flow.async_configure(result["flow_id"], user_input={CONF_PASSWORD: "x"})
+        assert result["errors"] == {"base": expected}
+
+
+async def test_reauth_invalid_password_stays_on_form(hass, mock_config_entry) -> None:
+    """A wrong replacement password keeps the reauth form open."""
+    mock_config_entry.add_to_hass(hass)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "reauth", "entry_id": mock_config_entry.entry_id}
+    )
+    with patch(FLOW_CLIENT) as mock_client_cls:
+        mock_client_cls.return_value.async_login = AsyncMock(side_effect=AuthError("nope"))
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], user_input={CONF_PASSWORD: "wrong"})
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_auth"}

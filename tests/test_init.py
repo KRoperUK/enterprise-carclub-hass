@@ -42,6 +42,9 @@ async def test_setup_and_unload(hass: HomeAssistant, mock_config_entry: MockConf
         assert hass.states.async_entity_ids("binary_sensor") == []
         assert hass.states.async_entity_ids("device_tracker") == []
 
+        calendar_ids = hass.states.async_entity_ids("calendar")
+        assert len(calendar_ids) == 1
+
         assert await hass.config_entries.async_unload(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
@@ -61,3 +64,17 @@ async def test_setup_forwards_the_coordinator_onto_the_entry(
     runtime_data: Any = mock_config_entry.runtime_data
     assert runtime_data is not None
     assert runtime_data.data == PAYLOAD
+
+
+async def test_options_change_reloads_entry(hass: HomeAssistant, mock_config_entry: MockConfigEntry) -> None:
+    """Changing options reloads the entry so search and favorites apply."""
+    mock_config_entry.add_to_hass(hass)
+
+    with patch(COORDINATOR_UPDATE, new=AsyncMock(return_value=PAYLOAD)):
+        assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+        hass.config_entries.async_update_entry(mock_config_entry, options={"window_hours": 6})
+        await hass.async_block_till_done()
+
+    assert mock_config_entry.state is ConfigEntryState.LOADED

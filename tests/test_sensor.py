@@ -122,3 +122,23 @@ def test_reservations_sensor_empty_state(mock_config_entry) -> None:
     sensor = _build(EnterpriseCarClubReservationsSensor, mock_config_entry, {"reservations": [], "messages": []})
     assert sensor.native_value == 0
     assert sensor.extra_state_attributes == {"next_reservation": None}
+
+
+def test_reservations_sensor_ignores_malformed_items(mock_config_entry) -> None:
+    """Non-dict reservation payloads never surface as the next booking."""
+    sensor = _build(
+        EnterpriseCarClubReservationsSensor,
+        mock_config_entry,
+        {"reservations": ["oops", 42], "messages": []},
+    )
+    assert sensor.native_value == 2
+    assert sensor.extra_state_attributes == {"next_reservation": None}
+
+
+def test_available_vehicles_sensor_no_data(mock_config_entry) -> None:
+    """Missing coordinator data renders unknown, not zero."""
+    from custom_components.enterprise_carclub.sensor import EnterpriseCarClubAvailableVehiclesSensor
+
+    sensor = _build(EnterpriseCarClubAvailableVehiclesSensor, mock_config_entry, None)
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes is None

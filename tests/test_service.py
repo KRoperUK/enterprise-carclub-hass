@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from custom_components.enterprise_carclub.const import DOMAIN
 
 COORDINATOR_CLIENT = "custom_components.enterprise_carclub.coordinator.Client"
@@ -91,3 +93,50 @@ async def test_book_vehicle_creates_reservation(hass, mock_config_entry) -> None
     assert response["currency"] == "GBP"
     _, kwargs = client.async_make_reservation.call_args
     assert kwargs["memo"] == "test"
+
+
+async def test_service_logs_in_when_token_missing(hass, mock_config_entry) -> None:
+    """Services reuse the entry credentials when no token is cached."""
+    mock_config_entry.add_to_hass(hass)
+
+    with (
+        patch(
+            "custom_components.enterprise_carclub.coordinator.EnterpriseCarClubCoordinator._async_update_data",
+            new=AsyncMock(return_value={"reservations": [], "messages": [], "vehicles": []}),
+        ),
+        patch(COORDINATOR_CLIENT) as mock_client_cls,
+    ):
+        client = mock_client_cls.return_value
+        client.token = None
+        client.async_login = AsyncMock()
+        client.async_get_stack_timeslots = AsyncMock(return_value=[])
+        assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+        await hass.services.async_call(
+            DOMAIN,
+            "check_availability",
+            {"stack_id": "53237", "start": "2026-11-21T18:00:00+00:00", "end": "2026-11-21T19:00:00+00:00"},
+            blocking=True,
+            return_response=True,
+        )
+
+    client.async_login.assert_called_once()
+
+
+async def test_service_without_setup_raises(hass) -> None:
+    """Calling a service with no configured entry fails loudly."""
+    from homeassistant.exceptions import HomeAssistantError
+
+    from custom_components.enterprise_carclub.services import async_setup_services
+
+    async_setup_services(hass)
+    async_setup_services(hass)
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            DOMAIN,
+            "check_availability",
+            {"stack_id": "1", "start": "2026-11-21T18:00:00+00:00", "end": "2026-11-21T19:00:00+00:00"},
+            blocking=True,
+            return_response=True,
+        )

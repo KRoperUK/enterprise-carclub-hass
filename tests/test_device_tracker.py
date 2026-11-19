@@ -57,3 +57,11 @@ def test_tracker_picture_missing_without_thumbnail(mock_config_entry) -> None:
     """No thumbnail means no picture, not a broken image."""
     tracker = _tracker(mock_config_entry, {"vehicles": [dict(VEHICLE)]})
     assert tracker.entity_picture is None
+
+
+def test_tracker_without_data_has_no_location(mock_config_entry) -> None:
+    """Missing coordinator data renders no location, not zeros."""
+    tracker = _tracker(mock_config_entry, None)
+    assert tracker.latitude is None
+    assert tracker.longitude is None
+    assert tracker.entity_picture is None

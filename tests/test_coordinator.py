@@ -71,6 +71,19 @@ async def test_auth_error_triggers_relogin(hass, mock_config_entry) -> None:
     client.async_login.assert_called_once()
 
 
+async def test_non_dict_stacks_are_skipped(hass, mock_config_entry) -> None:
+    """Malformed stack entries never reach entity attributes."""
+    coordinator = EnterpriseCarClubCoordinator(hass, mock_config_entry)
+
+    with patch(COORDINATOR_CLIENT) as mock_client_cls:
+        client = _mock_client()
+        client.async_search_stacks = AsyncMock(return_value=["oops", 42])
+        mock_client_cls.return_value = client
+        data = await coordinator._async_update_data()
+
+    assert data["vehicles"] == []
+
+
 async def test_bad_credentials_raise_config_entry_auth_failed(hass, mock_config_entry) -> None:
     """Repeated auth failure surfaces as ConfigEntryAuthFailed."""
     coordinator = EnterpriseCarClubCoordinator(hass, mock_config_entry)

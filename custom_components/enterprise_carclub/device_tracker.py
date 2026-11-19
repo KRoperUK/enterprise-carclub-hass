@@ -15,7 +15,7 @@ from .binary_sensor import vehicle_display_name
 from .const import DOMAIN
 from .coordinator import EnterpriseCarClubCoordinator
 
-PARALLEL_UPDATES = 0
+PARALLEL_UPDATES = 1
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
