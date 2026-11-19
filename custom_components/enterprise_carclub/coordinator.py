@@ -3,25 +3,44 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+import time
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from enterprise_carclub import AuthError, Client, ClientError
+from enterprise_carclub import AuthError, Client, ClientError, summarize_stack
 
-from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
+from .const import (
+    CONF_MARKET_ID,
+    CONF_WINDOW_HOURS,
+    DEFAULT_MARKET_ID,
+    DEFAULT_SCAN_INTERVAL,
+    DEFAULT_WINDOW_HOURS,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 
+def next_quarter_epoch(from_epoch: int | None = None) -> int:
+    """Round up to the next 15-minute boundary (API requirement)."""
+    base = from_epoch if from_epoch is not None else int(time.time())
+    return ((base // 900) + 1) * 900
+
+
+def isoformat_epoch(epoch: int) -> str:
+    """Format epoch seconds as an ISO-8601 UTC string."""
+    return datetime.fromtimestamp(epoch, tz=UTC).isoformat()
+
+
 class EnterpriseCarClubCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """Fetch reservations and messages for one Enterprise Car Club account."""
+    """Fetch reservations, messages and nearby vehicles for one account."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize."""
@@ -40,10 +59,60 @@ class EnterpriseCarClubCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._client = Client(async_get_clientsession(self.hass))
         return self._client
 
+    def _search_params(self) -> dict[str, Any]:
+        options = self.entry.options
+        latitude = options.get(CONF_LATITUDE, self.hass.config.latitude)
+        longitude = options.get(CONF_LONGITUDE, self.hass.config.longitude)
+        window_hours = options.get(CONF_WINDOW_HOURS, DEFAULT_WINDOW_HOURS)
+        market_id = options.get(CONF_MARKET_ID, DEFAULT_MARKET_ID)
+        start = next_quarter_epoch()
+        return {
+            "latitude": latitude,
+            "longitude": longitude,
+            "market_id": market_id,
+            "start_time": start,
+            "end_time": start + int(window_hours) * 3600,
+        }
+
+    def _summarize_stacks(self, stacks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        summaries = []
+        for entry in stacks:
+            if not isinstance(entry, dict):
+                continue
+            summary = summarize_stack(entry)
+            slots = summary.get("timeslots")
+            if isinstance(slots, list):
+                summary["timeslots"] = [
+                    {
+                        "time": isoformat_epoch(s["time"]) if isinstance(s.get("time"), int) else s.get("time"),
+                        "available": s.get("available"),
+                    }
+                    for s in slots
+                    if isinstance(s, dict)
+                ]
+            if isinstance(summary.get("next_free_time"), int):
+                summary["next_free_time"] = isoformat_epoch(summary["next_free_time"])
+            summaries.append(summary)
+        return summaries
+
     async def _fetch(self, client: Client) -> dict[str, Any]:
         reservations = await client.async_get_current_and_future()
         messages = await client.async_get_driver_messages()
-        return {"reservations": reservations, "messages": messages, "source": "cloud"}
+        params = self._search_params()
+        stacks = await client.async_search_stacks(
+            latitude=params["latitude"],
+            longitude=params["longitude"],
+            start_time=params["start_time"],
+            end_time=params["end_time"],
+            market_id=params["market_id"],
+        )
+        return {
+            "reservations": reservations,
+            "messages": messages,
+            "vehicles": self._summarize_stacks(stacks),
+            "search_params": params,
+            "source": "cloud",
+        }
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from the Enterprise Car Club API."""
