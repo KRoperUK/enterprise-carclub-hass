@@ -13,7 +13,12 @@ from custom_components.enterprise_carclub.const import DOMAIN
 
 COORDINATOR_UPDATE = "custom_components.enterprise_carclub.coordinator.EnterpriseCarClubCoordinator._async_update_data"
 
-PAYLOAD: dict[str, Any] = {"reservations": [{"id": "1"}], "messages": [], "source": "cloud"}
+PAYLOAD: dict[str, Any] = {
+    "reservations": [{"id": "1"}],
+    "messages": [{"id": "3660"}],
+    "vehicles": [],
+    "source": "cloud",
+}
 
 
 async def test_setup_and_unload(hass: HomeAssistant, mock_config_entry: MockConfigEntry) -> None:
@@ -29,10 +34,13 @@ async def test_setup_and_unload(hass: HomeAssistant, mock_config_entry: MockConf
         assert mock_config_entry.domain == DOMAIN
         assert mock_config_entry.state is ConfigEntryState.LOADED
 
-        entity_ids = sorted(hass.states.async_entity_ids("sensor"))
-        assert len(entity_ids) == 2
-        states = {hass.states.get(eid).state for eid in entity_ids}
-        assert states == {"1", "0"}
+        sensor_ids = sorted(hass.states.async_entity_ids("sensor"))
+        assert len(sensor_ids) == 3
+        states = sorted(hass.states.get(eid).state for eid in sensor_ids)
+        assert states == ["0", "1", "1"]
+
+        assert hass.states.async_entity_ids("binary_sensor") == []
+        assert hass.states.async_entity_ids("device_tracker") == []
 
         assert await hass.config_entries.async_unload(mock_config_entry.entry_id)
         await hass.async_block_till_done()

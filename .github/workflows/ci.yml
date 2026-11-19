@@ -53,8 +53,9 @@ jobs:
       # requirements_test.txt pins ruff and mypy, and also pulls in Home
       # Assistant — whose types mypy needs to resolve the integration's base
       # classes. Installing only the tools makes mypy report every HA class as
-      # "cannot subclass value of type Any".
-      - run: pip install -r requirements_test.txt
+      # "cannot subclass value of type Any". The client library comes from
+      # PyPI (published by release-please on the sibling repo).
+      - run: pip install -r requirements_test.txt enterprise-carclub
       - run: ruff check custom_components tests
       - run: ruff format --check custom_components tests
       - run: mypy
@@ -72,8 +73,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: |
           python -m pip install --upgrade pip
-          pip install -r requirements_test.txt
-      - run: pytest --cov=custom_components.example --cov-report=term-missing
+          pip install -r requirements_test.txt enterprise-carclub
+      - run: pytest --cov=custom_components.enterprise_carclub --cov-report=term-missing
 
   hacs_validate:
     needs: changes

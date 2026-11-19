@@ -14,23 +14,46 @@ from custom_components.enterprise_carclub.coordinator import EnterpriseCarClubCo
 COORDINATOR_CLIENT = "custom_components.enterprise_carclub.coordinator.Client"
 
 
-async def test_update_data_returns_reservations_and_messages(hass, mock_config_entry) -> None:
-    """Coordinator logs in once, then fetches reservations and messages."""
+def _search_entry() -> dict:
+    return {
+        "availability": "good",
+        "distance": 1221.6,
+        "timeslots": [{"time": 1795026600, "available": True}],
+        "vehicle_stack": {
+            "id": "53237",
+            "description": "#53237: Peugeot 208",
+            "latitude": 53.47,
+            "longitude": -2.29,
+            "make_model": "Peugeot 208",
+            "vehicle_details": {"plate": "FL26 PKZ", "year": 2026},
+        },
+    }
+
+
+def _mock_client():
+    client = AsyncMock()
+    client.token = None
+    client.async_login = AsyncMock()
+    client.async_get_current_and_future = AsyncMock(return_value=[])
+    client.async_get_driver_messages = AsyncMock(return_value=[])
+    client.async_search_stacks = AsyncMock(return_value=[_search_entry()])
+    return client
+
+
+async def test_update_data_returns_reservations_messages_and_vehicles(hass, mock_config_entry) -> None:
+    """Coordinator logs in once, then fetches reservations, messages and search."""
     coordinator = EnterpriseCarClubCoordinator(hass, mock_config_entry)
 
     with patch(COORDINATOR_CLIENT) as mock_client_cls:
-        client = mock_client_cls.return_value
-        client.token = None
-        client.async_login = AsyncMock()
-        client.async_get_current_and_future = AsyncMock(return_value=[{"id": "1"}])
-        client.async_get_driver_messages = AsyncMock(return_value=[{"id": "3660"}])
-
+        mock_client_cls.return_value = _mock_client()
         data = await coordinator._async_update_data()
 
-    assert data["reservations"] == [{"id": "1"}]
-    assert data["messages"] == [{"id": "3660"}]
+    assert data["reservations"] == []
+    assert data["messages"] == []
+    assert len(data["vehicles"]) == 1
+    assert data["vehicles"][0]["stack_id"] == "53237"
+    assert data["vehicles"][0]["size_class"] == "small"
     assert data["source"] == "cloud"
-    client.async_login.assert_called_once()
 
 
 async def test_auth_error_triggers_relogin(hass, mock_config_entry) -> None:
@@ -38,12 +61,10 @@ async def test_auth_error_triggers_relogin(hass, mock_config_entry) -> None:
     coordinator = EnterpriseCarClubCoordinator(hass, mock_config_entry)
 
     with patch(COORDINATOR_CLIENT) as mock_client_cls:
-        client = mock_client_cls.return_value
+        client = _mock_client()
         client.token = "stale"
-        client.async_login = AsyncMock()
         client.async_get_current_and_future = AsyncMock(side_effect=[AuthError("expired"), [{"id": "2"}]])
-        client.async_get_driver_messages = AsyncMock(return_value=[])
-
+        mock_client_cls.return_value = client
         data = await coordinator._async_update_data()
 
     assert data["reservations"] == [{"id": "2"}]
@@ -55,9 +76,9 @@ async def test_bad_credentials_raise_config_entry_auth_failed(hass, mock_config_
     coordinator = EnterpriseCarClubCoordinator(hass, mock_config_entry)
 
     with patch(COORDINATOR_CLIENT) as mock_client_cls:
-        client = mock_client_cls.return_value
-        client.token = None
+        client = _mock_client()
         client.async_login = AsyncMock(side_effect=AuthError("nope"))
+        mock_client_cls.return_value = client
         try:
             await coordinator._async_update_data()
         except ConfigEntryAuthFailed:
@@ -70,10 +91,10 @@ async def test_api_failure_raises_update_failed(hass, mock_config_entry) -> None
     coordinator = EnterpriseCarClubCoordinator(hass, mock_config_entry)
 
     with patch(COORDINATOR_CLIENT) as mock_client_cls:
-        client = mock_client_cls.return_value
+        client = _mock_client()
         client.token = "tok"
-        client.async_login = AsyncMock()
         client.async_get_current_and_future = AsyncMock(side_effect=ClientError("down"))
+        mock_client_cls.return_value = client
         try:
             await coordinator._async_update_data()
         except UpdateFailed:

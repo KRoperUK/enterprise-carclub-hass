@@ -3,22 +3,20 @@
 from __future__ import annotations
 
 from custom_components.enterprise_carclub.sensor import (
+    EnterpriseCarClubAvailableVehiclesSensor,
     EnterpriseCarClubMessagesSensor,
     EnterpriseCarClubReservationsSensor,
 )
 
+from .conftest import VEHICLE
+
 
 def _build(sensor_cls, entry, data):
-    coordinator = _coordinator(data)
-    return sensor_cls(coordinator, entry)
-
-
-def _coordinator(data):
     from unittest.mock import MagicMock
 
     coordinator = MagicMock()
     coordinator.data = data
-    return coordinator
+    return sensor_cls(coordinator, entry)
 
 
 def test_reservations_sensor_reports_count(mock_config_entry) -> None:
@@ -43,6 +41,29 @@ def test_messages_sensor_reports_count(mock_config_entry) -> None:
     assert sensor.unique_id.endswith("_messages")
 
 
+def test_available_vehicles_sensor_counts_good_only(mock_config_entry) -> None:
+    """Only stacks with good availability are counted."""
+    vehicles = [
+        dict(VEHICLE),
+        dict(VEHICLE, stack_id="other", availability="limited"),
+    ]
+    sensor = _build(
+        EnterpriseCarClubAvailableVehiclesSensor,
+        mock_config_entry,
+        {"reservations": [], "messages": [], "vehicles": vehicles},
+    )
+    assert sensor.native_value == 1
+    assert sensor.unique_id.endswith("_vehicles")
+    attributes = sensor.extra_state_attributes
+    assert attributes is not None
+    assert attributes["by_size_class"] == {"small": 1}
+    assert attributes["by_fuel"] == {"petrol": 1}
+    assert len(attributes["vehicles"]) == 1
+    assert "timeslots" not in attributes["vehicles"][0]
+    assert attributes["vehicles"][0]["slot_count"] == 2
+    assert attributes["vehicles"][0]["free_slot_count"] == 1
+
+
 def test_unique_id_and_device_info(mock_config_entry) -> None:
     """Sensors share one device rooted at the config entry."""
     sensor = _build(
@@ -59,3 +80,45 @@ def test_no_data_returns_none(mock_config_entry) -> None:
     """Missing coordinator data renders as unknown, not zero."""
     sensor = _build(EnterpriseCarClubReservationsSensor, mock_config_entry, None)
     assert sensor.native_value is None
+
+
+def test_reservations_sensor_exposes_next_booking(mock_config_entry) -> None:
+    """The soonest reservation surfaces with vehicle and cost details."""
+    from .conftest import VEHICLE
+
+    reservation = {
+        "id": "14566233",
+        "status": "normal",
+        "start_timestamp": 1795107600,
+        "end_timestamp": 1795122000,
+        "estimate_unformatted": {"currency_amount": {"currency_code": "GBP", "value": 33.98}},
+        "vehicle_stack": dict(
+            VEHICLE,
+            make_model="Ford Transit Custom EV",
+            lot_description="Blossom Street, Ancoats, M4 6AJ",
+            vehicle_details={"plate": "WO25 DUH"},
+        ),
+    }
+    sensor = _build(
+        EnterpriseCarClubReservationsSensor,
+        mock_config_entry,
+        {"reservations": [reservation], "messages": []},
+    )
+    assert sensor.native_value == 1
+    details = sensor.extra_state_attributes
+    assert details is not None
+    nxt = details["next_reservation"]
+    assert nxt["id"] == "14566233"
+    assert nxt["make_model"] == "Ford Transit Custom EV"
+    assert nxt["location"] == "Blossom Street, Ancoats, M4 6AJ"
+    assert nxt["plate"] == "WO25 DUH"
+    assert nxt["total"] == 33.98
+    assert nxt["currency"] == "GBP"
+    assert nxt["start"].startswith("2026-")
+
+
+def test_reservations_sensor_empty_state(mock_config_entry) -> None:
+    """No bookings renders an explicit empty next reservation."""
+    sensor = _build(EnterpriseCarClubReservationsSensor, mock_config_entry, {"reservations": [], "messages": []})
+    assert sensor.native_value == 0
+    assert sensor.extra_state_attributes == {"next_reservation": None}
