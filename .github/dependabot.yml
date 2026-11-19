@@ -45,3 +45,7 @@ updates:
       prefix: "chore(deps)"
     labels:
       - "dependencies"
+    groups:
+      pre-commit:
+        patterns:
+          - "*"
