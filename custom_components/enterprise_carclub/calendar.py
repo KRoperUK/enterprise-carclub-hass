@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
@@ -11,16 +11,57 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .binary_sensor import vehicle_display_name
+from .const import CONF_FAVORITE_STACK_IDS, DOMAIN
 from .coordinator import EnterpriseCarClubCoordinator
 
 PARALLEL_UPDATES = 1
 
 
+def _as_timestamp(value: date | datetime) -> float:
+    if isinstance(value, datetime):
+        return value.timestamp()
+    return datetime(value.year, value.month, value.day, tzinfo=UTC).timestamp()
+
+
+def _merge_slots(slots: list[dict[str, Any]]) -> list[tuple[int, int]]:
+    """Merge consecutive available 15-minute slots into (start, end) windows.
+
+    Slot times are ISO-8601 strings (see coordinator); entries that do not
+    parse are skipped.
+    """
+    times: list[int] = []
+    for slot in slots:
+        if not isinstance(slot, dict) or slot.get("available") is not True:
+            continue
+        raw = slot.get("time")
+        try:
+            stamp = datetime.fromisoformat(str(raw)).timestamp()
+        except TypeError, ValueError:
+            continue
+        times.append(int(stamp))
+    times.sort()
+    windows: list[tuple[int, int]] = []
+    for stamp in times:
+        if windows and stamp <= windows[-1][1] + 60:
+            windows[-1] = (windows[-1][0], stamp + 900)
+        else:
+            windows.append((stamp, stamp + 900))
+    return windows
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
-    """Set up the reservations calendar."""
+    """Set up the reservations calendar plus one availability calendar per favorite."""
     coordinator: EnterpriseCarClubCoordinator = entry.runtime_data
-    async_add_entities([EnterpriseCarClubCalendar(coordinator, entry)])
+    favorites = entry.options.get(CONF_FAVORITE_STACK_IDS, [])
+    async_add_entities(
+        [EnterpriseCarClubCalendar(coordinator, entry)]
+        + [
+            EnterpriseCarClubAvailabilityCalendar(coordinator, entry, stack_id)
+            for stack_id in favorites
+            if isinstance(stack_id, str)
+        ]
+    )
 
 
 def _as_utc(epoch: int) -> datetime:
@@ -109,3 +150,77 @@ class EnterpriseCarClubCalendar(CoordinatorEntity[EnterpriseCarClubCoordinator],
             if event is not None:
                 events.append(event)
         return events
+
+
+class EnterpriseCarClubAvailabilityCalendar(CoordinatorEntity[EnterpriseCarClubCoordinator], CalendarEntity):
+    """Free windows of one favorite vehicle, as calendar events."""
+
+    _attr_has_entity_name = True
+
+    def __init__(self, coordinator: EnterpriseCarClubCoordinator, entry: ConfigEntry, stack_id: str) -> None:
+        """Initialize."""
+        super().__init__(coordinator)
+        self._stack_id = stack_id
+        self._attr_unique_id = f"{entry.unique_id}_avail_{stack_id}"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, f"stack_{stack_id}")},
+            "name": entry.title,
+            "manufacturer": "Enterprise Car Club",
+        }
+
+    def _vehicle(self) -> dict[str, Any] | None:
+        data = self.coordinator.data
+        if not data:
+            return None
+        for vehicle in data.get("vehicles", []):
+            if isinstance(vehicle, dict) and vehicle.get("stack_id") == self._stack_id:
+                return vehicle
+        return None
+
+    def _windows(self) -> list[CalendarEvent]:
+        vehicle = self._vehicle()
+        if not vehicle:
+            return []
+        slots = vehicle.get("timeslots")
+        if not isinstance(slots, list):
+            return []
+        name = vehicle_display_name(vehicle, self._stack_id)
+        events = []
+        for start_ts, end_ts in _merge_slots(slots):
+            events.append(
+                CalendarEvent(
+                    uid=f"{self._stack_id}-{start_ts}",
+                    summary=f"{name} available",
+                    description=f"Bookable window for {name}",
+                    start=datetime.fromtimestamp(start_ts, tz=UTC),
+                    end=datetime.fromtimestamp(end_ts, tz=UTC),
+                )
+            )
+        return events
+
+    @property
+    def event(self) -> CalendarEvent | None:
+        """Return the next upcoming free window, if any."""
+        now = datetime.now(tz=UTC).timestamp()
+        upcoming = [e for e in self._windows() if _as_timestamp(e.end) > now]
+        return upcoming[0] if upcoming else None
+
+    @property
+    def name(self) -> str | None:
+        """Name follows the vehicle so each favorite is distinguishable."""
+        vehicle = self._vehicle()
+        if vehicle is None:
+            return f"Availability ({self._stack_id})"
+        return f"{vehicle_display_name(vehicle, self._stack_id)} availability"
+
+    async def async_get_events(
+        self, hass: HomeAssistant, start_date: datetime, end_date: datetime
+    ) -> list[CalendarEvent]:
+        """Return free windows overlapping the requested range."""
+        start_ts = start_date.timestamp()
+        end_ts = end_date.timestamp()
+        return [
+            event
+            for event in self._windows()
+            if _as_timestamp(event.end) >= start_ts and _as_timestamp(event.start) <= end_ts
+        ]

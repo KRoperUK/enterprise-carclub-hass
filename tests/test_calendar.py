@@ -102,3 +102,97 @@ async def test_no_data_means_no_event(hass, mock_config_entry) -> None:
         )
         == []
     )
+
+
+def _avail_entry(stack_id: str = "53237") -> dict:
+    from .conftest import VEHICLE
+
+    return {"vehicles": [dict(VEHICLE, stack_id=stack_id)]}
+
+
+def _avail_calendar(entry, data, stack_id="53237"):
+    from unittest.mock import MagicMock
+
+    from custom_components.enterprise_carclub.calendar import EnterpriseCarClubAvailabilityCalendar
+
+    coordinator = MagicMock()
+    coordinator.data = data
+    return EnterpriseCarClubAvailabilityCalendar(coordinator, entry, stack_id)
+
+
+def test_merge_slots_groups_consecutive_windows() -> None:
+    """Adjacent free slots merge; gaps and busy slots split windows."""
+    from custom_components.enterprise_carclub.calendar import _merge_slots
+
+    base = datetime(2026, 11, 21, 18, 0, tzinfo=UTC).timestamp()
+    slots = [
+        {"time": datetime.fromtimestamp(base, tz=UTC).isoformat(), "available": True},
+        {"time": datetime.fromtimestamp(base + 900, tz=UTC).isoformat(), "available": True},
+        {"time": datetime.fromtimestamp(base + 1800, tz=UTC).isoformat(), "available": False},
+        {"time": datetime.fromtimestamp(base + 2700, tz=UTC).isoformat(), "available": True},
+        {"time": "not-a-time", "available": True},
+        {"available": True},
+    ]
+    windows = _merge_slots(slots)
+    assert windows == [(int(base), int(base) + 1800), (int(base) + 2700, int(base) + 3600)]
+
+
+async def test_availability_calendar_shows_free_windows(hass, mock_config_entry) -> None:
+    """A favorite's free windows appear as calendar events."""
+    import time
+
+    from .conftest import VEHICLE
+
+    base = int(time.time() // 900 * 900) + 3600
+    slots = [
+        {"time": datetime.fromtimestamp(base, tz=UTC).isoformat(), "available": True},
+        {"time": datetime.fromtimestamp(base + 900, tz=UTC).isoformat(), "available": True},
+    ]
+    calendar = _avail_calendar(mock_config_entry, {"vehicles": [dict(VEHICLE, stack_id="53237", timeslots=slots)]})
+    assert "53237" in (calendar.name or "")
+    assert calendar.event is not None
+    assert calendar.event.summary.endswith("available")
+    events = await calendar.async_get_events(
+        hass,
+        datetime.fromtimestamp(base - 3600, tz=UTC),
+        datetime.fromtimestamp(base + 7200, tz=UTC),
+    )
+    assert len(events) == 1
+    assert events[0].uid.startswith("53237-")
+
+
+async def test_availability_calendar_empty_without_vehicle(hass, mock_config_entry) -> None:
+    """No vehicle data means no windows and a fallback name."""
+    calendar = _avail_calendar(mock_config_entry, {"vehicles": []})
+    assert calendar.event is None
+    assert calendar.name == "Availability (53237)"
+    assert (
+        await calendar.async_get_events(
+            hass,
+            datetime(2026, 11, 21, tzinfo=UTC),
+            datetime(2026, 11, 22, tzinfo=UTC),
+        )
+        == []
+    )
+
+
+async def test_availability_calendars_created_per_favorite(hass, mock_config_entry) -> None:
+    """Setup adds one availability calendar per favorite stack."""
+    from unittest.mock import MagicMock
+
+    from custom_components.enterprise_carclub import calendar as calendar_module
+
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(mock_config_entry, options={"favorite_stack_ids": ["9", "8"]})
+    mock_config_entry.runtime_data = MagicMock()
+    mock_config_entry.runtime_data.data = {"vehicles": []}
+
+    added: list = []
+    await calendar_module.async_setup_entry(hass, mock_config_entry, added.extend)
+    await hass.async_block_till_done()
+    kinds = sorted(type(entity).__name__ for entity in added)
+    assert kinds == [
+        "EnterpriseCarClubAvailabilityCalendar",
+        "EnterpriseCarClubAvailabilityCalendar",
+        "EnterpriseCarClubCalendar",
+    ]
