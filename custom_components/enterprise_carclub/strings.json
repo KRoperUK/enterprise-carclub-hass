@@ -26,6 +26,24 @@
       "already_configured": "Account is already configured"
     }
   },
+  "entity": {
+    "sensor": {
+      "upcoming_reservations": {
+        "name": "Upcoming reservations"
+      },
+      "driver_messages": {
+        "name": "Driver messages"
+      },
+      "available_vehicles": {
+        "name": "Available vehicles"
+      }
+    },
+    "calendar": {
+      "reservations": {
+        "name": "Reservations"
+      }
+    }
+  },
   "options": {
     "step": {
       "init": {

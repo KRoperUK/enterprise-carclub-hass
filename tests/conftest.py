@@ -16,6 +16,7 @@ PASSWORD = "secret"  # noqa: S105 — test-only credential
 VEHICLE = {
     "stack_id": "53237",
     "description": "#53237: MediaCityUK M50 2EQ - Peugeot 208",
+    "lot_description": "MediaCityUK M50 2EQ",
     "distance_m": 1221.6,
     "make_model": "Peugeot 208",
     "seats": 5,
