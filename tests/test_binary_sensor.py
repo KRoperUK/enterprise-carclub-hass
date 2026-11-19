@@ -40,12 +40,25 @@ def test_favorite_unknown_when_absent_from_search(mock_config_entry) -> None:
 
 
 def test_friendly_name_uses_model_and_stack_id(mock_config_entry) -> None:
-    """The friendly name reads like ``Peugeot 208 (#53237)``."""
-    sensor = _build(
-        mock_config_entry,
-        {"vehicles": [dict(VEHICLE, make_model="Peugeot 208", lot_description="MediaCityUK M50 2EQ")]},
+    """The friendly name reads like ``Peugeot 208, MediaCityUK (53237)``."""
+    sensor = _build(mock_config_entry, {"vehicles": [dict(VEHICLE)]})
+    assert sensor.name == "Peugeot 208, MediaCityUK (53237)"
+
+
+def test_street_names_drop_postcodes_and_towns() -> None:
+    """Only the street portion survives in display names."""
+    from custom_components.enterprise_carclub.binary_sensor import street_of, vehicle_display_name
+
+    assert street_of({"lot_description": "Blossom Street, Ancoats, M4 6AJ"}) == "Blossom Street"
+    assert street_of({"lot_description": "MediaCityUK M50 2EQ"}) == "MediaCityUK"
+    assert street_of({}) is None
+    assert (
+        vehicle_display_name(
+            {"make_model": "Ford Transit Custom EV", "lot_description": "Blossom Street, Ancoats, M4 6AJ"},
+            "54978",
+        )
+        == "Ford Transit Custom EV, Blossom Street (54978)"
     )
-    assert sensor.name == "Peugeot 208, MediaCityUK M50 2EQ (53237)"
 
 
 def test_friendly_name_falls_back_without_vehicle(mock_config_entry) -> None:

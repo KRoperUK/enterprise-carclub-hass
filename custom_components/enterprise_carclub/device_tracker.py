@@ -8,27 +8,39 @@ from homeassistant.components.device_tracker.const import SourceType
 from homeassistant.components.device_tracker.entity import TrackerEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .binary_sensor import vehicle_display_name
-from .const import DOMAIN
+from .const import CONF_FAVORITE_STACK_IDS, DOMAIN
 from .coordinator import EnterpriseCarClubCoordinator
 
 PARALLEL_UPDATES = 1
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
-    """Set up one tracker per vehicle in the latest search."""
+    """Set up one tracker per favorite vehicle; prune unfavorited ones."""
     coordinator: EnterpriseCarClubCoordinator = entry.runtime_data
+    favorites = entry.options.get(CONF_FAVORITE_STACK_IDS, [])
     vehicles = (coordinator.data or {}).get("vehicles", [])
-    async_add_entities(
-        [
-            EnterpriseCarClubVehicleTracker(coordinator, entry, vehicle)
-            for vehicle in vehicles
-            if isinstance(vehicle, dict) and isinstance(vehicle.get("stack_id"), str)
-        ]
-    )
+    wanted = {
+        vehicle["stack_id"]
+        for vehicle in vehicles
+        if isinstance(vehicle, dict) and isinstance(vehicle.get("stack_id"), str) and vehicle["stack_id"] in favorites
+    }
+    by_id = {v["stack_id"]: v for v in vehicles if isinstance(v, dict) and v.get("stack_id") in wanted}
+    async_add_entities([EnterpriseCarClubVehicleTracker(coordinator, entry, by_id[stack_id]) for stack_id in wanted])
+
+    registry = dr.async_get(hass)
+    for device_entry in dr.async_entries_for_config_entry(registry, entry.entry_id):
+        for domain, identifier in device_entry.identifiers:
+            if (
+                domain == DOMAIN
+                and identifier.startswith("stack_")
+                and identifier.removeprefix("stack_") not in favorites
+            ):
+                registry.async_remove_device(device_entry.id)
 
 
 class EnterpriseCarClubVehicleTracker(CoordinatorEntity[EnterpriseCarClubCoordinator], TrackerEntity):
@@ -45,7 +57,7 @@ class EnterpriseCarClubVehicleTracker(CoordinatorEntity[EnterpriseCarClubCoordin
         self._attr_name = vehicle_display_name(vehicle, self._stack_id)
         self._attr_device_info = {  # type: ignore[assignment]
             "identifiers": {(DOMAIN, f"stack_{self._stack_id}")},
-            "name": vehicle.get("description") or f"Vehicle {self._stack_id}",
+            "name": vehicle_display_name(vehicle, self._stack_id),
             "manufacturer": "Enterprise Car Club",
             "model": vehicle.get("make_model"),
         }

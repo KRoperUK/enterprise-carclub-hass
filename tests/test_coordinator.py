@@ -56,6 +56,27 @@ async def test_update_data_returns_reservations_messages_and_vehicles(hass, mock
     assert data["source"] == "cloud"
 
 
+async def test_vehicles_link_to_matching_reservations(hass, mock_config_entry) -> None:
+    """A vehicle with a future booking carries the reservation summary."""
+    coordinator = EnterpriseCarClubCoordinator(hass, mock_config_entry)
+    reservation = {
+        "id": "14566233",
+        "status": "normal",
+        "start_timestamp": 1795107600,
+        "end_timestamp": 1795122000,
+        "vehicle_stack": {"id": "53237"},
+    }
+
+    with patch(COORDINATOR_CLIENT) as mock_client_cls:
+        client = _mock_client()
+        client.async_get_current_and_future = AsyncMock(return_value=[reservation])
+        mock_client_cls.return_value = client
+        data = await coordinator._async_update_data()
+
+    assert data["vehicles"][0]["reservation"]["id"] == "14566233"
+    assert data["vehicles"][0]["reservation"]["start"].startswith("2026-")
+
+
 async def test_auth_error_triggers_relogin(hass, mock_config_entry) -> None:
     """An expired token causes one re-login and a retry."""
     coordinator = EnterpriseCarClubCoordinator(hass, mock_config_entry)

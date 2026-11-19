@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
@@ -16,12 +17,25 @@ from .coordinator import EnterpriseCarClubCoordinator
 PARALLEL_UPDATES = 1
 
 
-def vehicle_display_name(vehicle: dict[str, Any], stack_id: str) -> str:
-    """Friendly name like ``Peugeot 208, MediaCityUK M50 2EQ (53237)``."""
-    make_model = vehicle.get("make_model")
+def street_of(vehicle: dict[str, Any]) -> str | None:
+    """First address line only: ``Blossom Street`` from ``Blossom Street, Ancoats, M4 6AJ``.
+
+    UK postcodes are stripped too, so ``MediaCityUK M50 2EQ`` becomes ``MediaCityUK``.
+    """
     lot = vehicle.get("lot_description") or vehicle.get("description")
-    if isinstance(make_model, str) and isinstance(lot, str) and lot:
-        return f"{make_model}, {lot} ({stack_id})"
+    if not isinstance(lot, str) or not lot.strip():
+        return None
+    first = lot.split(",")[0].strip()
+    street = re.sub(r"\s+[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\s*$", "", first).strip()
+    return street or None
+
+
+def vehicle_display_name(vehicle: dict[str, Any], stack_id: str) -> str:
+    """Friendly name like ``Peugeot 208, MediaCityUK (53237)``."""
+    make_model = vehicle.get("make_model")
+    street = street_of(vehicle)
+    if isinstance(make_model, str) and street:
+        return f"{make_model}, {street} ({stack_id})"
     if isinstance(make_model, str):
         return f"{make_model} ({stack_id})"
     return f"Favorite {stack_id}"

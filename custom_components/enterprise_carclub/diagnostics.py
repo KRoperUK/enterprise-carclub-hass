@@ -8,25 +8,18 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
-from .const import DOMAIN
-
 TO_REDACT = {"password", "token", "authorization_token", "login_token"}
 
 
 def _redacted(value: Any) -> Any:
     if isinstance(value, dict):
-        return {
-            key: ("**REDACTED**" if key in TO_REDACT else _redacted(item))
-            for key, item in value.items()
-        }
+        return {key: ("**REDACTED**" if key in TO_REDACT else _redacted(item)) for key, item in value.items()}
     if isinstance(value, list):
         return [_redacted(item) for item in value]
     return value
 
 
-async def async_get_config_entry_diagnostics(
-    hass: HomeAssistant, entry: ConfigEntry
-) -> dict[str, Any]:
+async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
     """Return diagnostics for a config entry (credentials redacted)."""
     coordinator = entry.runtime_data
     data = getattr(coordinator, "data", None)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
@@ -24,7 +24,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
 
 def _as_utc(epoch: int) -> datetime:
-    return datetime.fromtimestamp(epoch, tz=timezone.utc)
+    return datetime.fromtimestamp(epoch, tz=UTC)
 
 
 def _as_event(reservation: dict[str, Any]) -> CalendarEvent | None:
@@ -84,11 +84,9 @@ class EnterpriseCarClubCalendar(CoordinatorEntity[EnterpriseCarClubCoordinator],
     @property
     def event(self) -> CalendarEvent | None:
         """Return the next upcoming reservation, if any."""
-        now = datetime.now(tz=timezone.utc).timestamp()
+        now = datetime.now(tz=UTC).timestamp()
         upcoming = [
-            r
-            for r in self._reservations()
-            if isinstance(r.get("end_timestamp"), int) and r["end_timestamp"] > now
+            r for r in self._reservations() if isinstance(r.get("end_timestamp"), int) and r["end_timestamp"] > now
         ]
         upcoming.sort(key=EnterpriseCarClubCalendar._reservation_start)
         return _as_event(upcoming[0]) if upcoming else None

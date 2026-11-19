@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 from custom_components.enterprise_carclub.calendar import (
@@ -52,8 +52,8 @@ async def test_get_events_filters_by_range(hass, mock_config_entry) -> None:
     """Only overlapping reservations are returned for a range."""
     reservation = _reservation()
     calendar = _calendar(mock_config_entry, {"reservations": [reservation]})
-    start = datetime.fromtimestamp(reservation["start_timestamp"], tz=timezone.utc)
-    end = datetime.fromtimestamp(reservation["end_timestamp"], tz=timezone.utc)
+    start = datetime.fromtimestamp(reservation["start_timestamp"], tz=UTC)
+    end = datetime.fromtimestamp(reservation["end_timestamp"], tz=UTC)
     in_range = await calendar.async_get_events(
         hass,
         start.replace(hour=0, minute=0),
@@ -62,8 +62,8 @@ async def test_get_events_filters_by_range(hass, mock_config_entry) -> None:
     assert len(in_range) == 1
     out_of_range = await calendar.async_get_events(
         hass,
-        datetime(2026, 11, 23, 18, 0, tzinfo=timezone.utc),
-        datetime(2026, 11, 23, 22, 0, tzinfo=timezone.utc),
+        datetime(2026, 11, 23, 18, 0, tzinfo=UTC),
+        datetime(2026, 11, 23, 22, 0, tzinfo=UTC),
     )
     assert out_of_range == []
 
@@ -72,11 +72,14 @@ async def test_malformed_timestamps_produce_no_events(hass, mock_config_entry) -
     """Reservations with non-epoch timestamps are skipped, not crashed on."""
     calendar = _calendar(mock_config_entry, {"reservations": [{"id": "x", "start_timestamp": "soon"}]})
     assert calendar.event is None
-    assert await calendar.async_get_events(
-        hass,
-        datetime(2026, 11, 21, tzinfo=timezone.utc),
-        datetime(2026, 11, 22, tzinfo=timezone.utc),
-    ) == []
+    assert (
+        await calendar.async_get_events(
+            hass,
+            datetime(2026, 11, 21, tzinfo=UTC),
+            datetime(2026, 11, 22, tzinfo=UTC),
+        )
+        == []
+    )
 
 
 async def test_event_property_returns_next_upcoming(hass, mock_config_entry) -> None:
@@ -91,8 +94,11 @@ async def test_no_data_means_no_event(hass, mock_config_entry) -> None:
     """Missing coordinator data renders no event rather than erroring."""
     calendar = _calendar(mock_config_entry, None)
     assert calendar.event is None
-    assert await calendar.async_get_events(
-        hass,
-        datetime(2026, 11, 21, tzinfo=timezone.utc),
-        datetime(2026, 11, 22, tzinfo=timezone.utc),
-    ) == []
+    assert (
+        await calendar.async_get_events(
+            hass,
+            datetime(2026, 11, 21, tzinfo=UTC),
+            datetime(2026, 11, 22, tzinfo=UTC),
+        )
+        == []
+    )

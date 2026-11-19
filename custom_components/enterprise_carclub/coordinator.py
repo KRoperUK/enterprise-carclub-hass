@@ -74,12 +74,42 @@ class EnterpriseCarClubCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "end_time": start + int(window_hours) * 3600,
         }
 
-    def _summarize_stacks(self, stacks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    @staticmethod
+    def _reservation_by_stack(reservations: Any) -> dict[str, dict[str, Any]]:
+        """Index future reservations by their vehicle stack id."""
+        index: dict[str, dict[str, Any]] = {}
+        if not isinstance(reservations, list):
+            return index
+        for reservation in reservations:
+            if not isinstance(reservation, dict):
+                continue
+            stack = reservation.get("vehicle_stack")
+            stack_id = stack.get("id") if isinstance(stack, dict) else None
+            if isinstance(stack_id, str):
+                index[stack_id] = reservation
+        return index
+
+    def _summarize_stacks(
+        self, stacks: list[dict[str, Any]], reservations: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        by_stack = self._reservation_by_stack(reservations)
         summaries = []
         for entry in stacks:
             if not isinstance(entry, dict):
                 continue
             summary = summarize_stack(entry)
+            reservation = by_stack.get(str(summary.get("stack_id")))
+            if reservation is not None:
+                start = reservation.get("start_timestamp")
+                end = reservation.get("end_timestamp")
+                summary["reservation"] = {
+                    "id": reservation.get("id"),
+                    "status": reservation.get("status"),
+                    "start": isoformat_epoch(start) if isinstance(start, int) else start,
+                    "end": isoformat_epoch(end) if isinstance(end, int) else end,
+                }
+            else:
+                summary["reservation"] = None
             slots = summary.get("timeslots")
             if isinstance(slots, list):
                 summary["timeslots"] = [
@@ -109,7 +139,7 @@ class EnterpriseCarClubCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return {
             "reservations": reservations,
             "messages": messages,
-            "vehicles": self._summarize_stacks(stacks),
+            "vehicles": self._summarize_stacks(stacks, reservations),
             "search_params": params,
             "source": "cloud",
         }

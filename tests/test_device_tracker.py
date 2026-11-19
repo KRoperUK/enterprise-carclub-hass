@@ -65,3 +65,46 @@ def test_tracker_without_data_has_no_location(mock_config_entry) -> None:
     assert tracker.latitude is None
     assert tracker.longitude is None
     assert tracker.entity_picture is None
+
+
+async def test_setup_only_tracks_favorites(hass, mock_config_entry) -> None:
+    """Only favorite stacks get trackers; other search hits stay out of the device list."""
+    from unittest.mock import MagicMock
+
+    from custom_components.enterprise_carclub import device_tracker as tracker_module
+
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(mock_config_entry, options={"favorite_stack_ids": ["53237"]})
+    coordinator = MagicMock()
+    coordinator.data = {"vehicles": [dict(VEHICLE, stack_id="53237"), dict(VEHICLE, stack_id="99999")]}
+    mock_config_entry.runtime_data = coordinator
+
+    added: list = []
+    await tracker_module.async_setup_entry(hass, mock_config_entry, added.extend)
+    await hass.async_block_till_done()
+    assert [entity.unique_id for entity in added] == [f"{mock_config_entry.unique_id}_stack_53237"]
+
+
+async def test_unfavorited_stale_devices_are_pruned(hass, mock_config_entry) -> None:
+    """Removing a favorite deletes its orphaned device on next setup."""
+    from unittest.mock import MagicMock
+
+    from homeassistant.helpers import device_registry as dr
+
+    from custom_components.enterprise_carclub import device_tracker as tracker_module
+    from custom_components.enterprise_carclub.const import DOMAIN
+
+    mock_config_entry.add_to_hass(hass)
+    registry = dr.async_get(hass)
+    stale = registry.async_get_or_create(
+        config_entry_id=mock_config_entry.entry_id,
+        identifiers={(DOMAIN, "stack_99999")},
+        name="Old favorite",
+        manufacturer="Enterprise Car Club",
+    )
+    mock_config_entry.runtime_data = MagicMock()
+    mock_config_entry.runtime_data.data = {"vehicles": []}
+
+    await tracker_module.async_setup_entry(hass, mock_config_entry, lambda entities: None)
+    await hass.async_block_till_done()
+    assert registry.async_get(stale.id) is None

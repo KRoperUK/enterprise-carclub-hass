@@ -5,8 +5,6 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from custom_components.enterprise_carclub.const import DOMAIN
-
 COORDINATOR_UPDATE = "custom_components.enterprise_carclub.coordinator.EnterpriseCarClubCoordinator._async_update_data"
 
 
