@@ -37,6 +37,7 @@ def _mock_client():
     client.async_get_current_and_future = AsyncMock(return_value=[])
     client.async_get_driver_messages = AsyncMock(return_value=[])
     client.async_search_stacks = AsyncMock(return_value=[_search_entry()])
+    client.async_get_stack_timeslots = AsyncMock(return_value=[])
     return client
 
 
@@ -92,6 +93,32 @@ async def test_auth_error_triggers_relogin(hass, mock_config_entry) -> None:
     client.async_login.assert_called_once()
 
 
+async def test_malformed_reservations_and_days_fall_back(hass, mock_config_entry) -> None:
+    """Bad reservation shapes and day options degrade gracefully."""
+    from custom_components.enterprise_carclub.const import CONF_CALENDAR_DAYS
+    from custom_components.enterprise_carclub.coordinator import EnterpriseCarClubCoordinator
+
+    assert EnterpriseCarClubCoordinator._reservation_by_stack("nope") == {}
+    assert EnterpriseCarClubCoordinator._reservation_by_stack([123, {"vehicle_stack": {}}]) == {}
+
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry, options={CONF_CALENDAR_DAYS: "junk", "favorite_stack_ids": ["1"]}
+    )
+    coordinator = EnterpriseCarClubCoordinator(hass, mock_config_entry)
+
+    with patch(COORDINATOR_CLIENT) as mock_client_cls:
+        client = _mock_client()
+        client.async_get_current_and_future = AsyncMock(return_value=[])
+        client.async_get_driver_messages = AsyncMock(return_value=[])
+        client.async_get_stack_timeslots = AsyncMock(side_effect=ClientError("down"))
+        mock_client_cls.return_value = client
+        data = await coordinator._async_update_data()
+
+    assert data["schedules"] == {}
+    client.async_get_stack_timeslots.assert_called_once()
+
+
 async def test_non_dict_stacks_are_skipped(hass, mock_config_entry) -> None:
     """Malformed stack entries never reach entity attributes."""
     coordinator = EnterpriseCarClubCoordinator(hass, mock_config_entry)
@@ -112,6 +139,25 @@ async def test_bad_credentials_raise_config_entry_auth_failed(hass, mock_config_
     with patch(COORDINATOR_CLIENT) as mock_client_cls:
         client = _mock_client()
         client.async_login = AsyncMock(side_effect=AuthError("nope"))
+        mock_client_cls.return_value = client
+        try:
+            await coordinator._async_update_data()
+        except ConfigEntryAuthFailed:
+            return
+        raise AssertionError("expected ConfigEntryAuthFailed")
+
+
+async def test_auth_error_in_schedules_still_reauths(hass, mock_config_entry) -> None:
+    """Auth failures during schedule fetch trigger re-auth, not silent skips."""
+    from custom_components.enterprise_carclub.const import CONF_FAVORITE_STACK_IDS
+
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(mock_config_entry, options={CONF_FAVORITE_STACK_IDS: ["1"]})
+    coordinator = EnterpriseCarClubCoordinator(hass, mock_config_entry)
+
+    with patch(COORDINATOR_CLIENT) as mock_client_cls:
+        client = _mock_client()
+        client.async_get_stack_timeslots = AsyncMock(side_effect=AuthError("expired"))
         mock_client_cls.return_value = client
         try:
             await coordinator._async_update_data()

@@ -14,12 +14,15 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from enterprise_carclub import AuthError, Client, ClientError
 
 from .const import (
+    CONF_CALENDAR_DAYS,
     CONF_FAVORITE_STACK_IDS,
     CONF_MARKET_ID,
     CONF_WINDOW_HOURS,
+    DEFAULT_CALENDAR_DAYS,
     DEFAULT_MARKET_ID,
     DEFAULT_WINDOW_HOURS,
     DOMAIN,
+    MAX_CALENDAR_DAYS,
 )
 
 
@@ -138,6 +141,10 @@ class EnterpriseCarClubOptionsFlow(OptionsFlow):
                         default=options.get(CONF_WINDOW_HOURS, DEFAULT_WINDOW_HOURS),
                     ): vol.All(vol.Coerce(int), vol.Range(min=1, max=24)),
                     vol.Optional(CONF_MARKET_ID, default=options.get(CONF_MARKET_ID, DEFAULT_MARKET_ID)): int,
+                    vol.Optional(
+                        CONF_CALENDAR_DAYS,
+                        default=options.get(CONF_CALENDAR_DAYS, DEFAULT_CALENDAR_DAYS),
+                    ): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_CALENDAR_DAYS)),
                     vol.Optional(
                         CONF_FAVORITE_STACK_IDS,
                         default=options.get(CONF_FAVORITE_STACK_IDS, []),

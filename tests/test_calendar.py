@@ -120,52 +120,71 @@ def _avail_calendar(entry, data, stack_id="53237"):
     return EnterpriseCarClubAvailabilityCalendar(coordinator, entry, stack_id)
 
 
-def test_merge_slots_groups_consecutive_windows() -> None:
-    """Adjacent free slots merge; gaps and busy slots split windows."""
+def test_as_timestamp_handles_plain_dates() -> None:
+    """Date objects convert at midnight UTC."""
+    import datetime as dt
+
+    from custom_components.enterprise_carclub.calendar import _as_timestamp
+
+    assert _as_timestamp(dt.date(2026, 11, 21)) == datetime(2026, 11, 21, tzinfo=UTC).timestamp()
+
+
+def test_merge_slots_groups_booked_windows() -> None:
+    """Adjacent booked slots merge; gaps and free slots split windows."""
     from custom_components.enterprise_carclub.calendar import _merge_slots
 
     base = datetime(2026, 11, 21, 18, 0, tzinfo=UTC).timestamp()
     slots = [
-        {"time": datetime.fromtimestamp(base, tz=UTC).isoformat(), "available": True},
-        {"time": datetime.fromtimestamp(base + 900, tz=UTC).isoformat(), "available": True},
-        {"time": datetime.fromtimestamp(base + 1800, tz=UTC).isoformat(), "available": False},
-        {"time": datetime.fromtimestamp(base + 2700, tz=UTC).isoformat(), "available": True},
-        {"time": "not-a-time", "available": True},
-        {"available": True},
+        {"time": datetime.fromtimestamp(base, tz=UTC).isoformat(), "available": False},
+        {"time": datetime.fromtimestamp(base + 900, tz=UTC).isoformat(), "available": False},
+        {"time": datetime.fromtimestamp(base + 1800, tz=UTC).isoformat(), "available": True},
+        {"time": datetime.fromtimestamp(base + 2700, tz=UTC).isoformat(), "available": False},
+        {"time": "not-a-time", "available": False},
+        {"available": False},
     ]
-    windows = _merge_slots(slots)
+    windows = _merge_slots(slots, available=False)
     assert windows == [(int(base), int(base) + 1800), (int(base) + 2700, int(base) + 3600)]
 
 
-async def test_availability_calendar_shows_free_windows(hass, mock_config_entry) -> None:
-    """A favorite's free windows appear as calendar events."""
+def _booked_data(stack_id: str = "53237") -> dict:
     import time
 
     from .conftest import VEHICLE
 
     base = int(time.time() // 900 * 900) + 3600
-    slots = [
-        {"time": datetime.fromtimestamp(base, tz=UTC).isoformat(), "available": True},
-        {"time": datetime.fromtimestamp(base + 900, tz=UTC).isoformat(), "available": True},
-    ]
-    calendar = _avail_calendar(mock_config_entry, {"vehicles": [dict(VEHICLE, stack_id="53237", timeslots=slots)]})
+    return {
+        "vehicles": [dict(VEHICLE, stack_id=stack_id)],
+        "schedules": {
+            stack_id: [
+                {"time": datetime.fromtimestamp(base, tz=UTC).isoformat(), "available": False},
+                {"time": datetime.fromtimestamp(base + 900, tz=UTC).isoformat(), "available": False},
+                {"time": datetime.fromtimestamp(base + 1800, tz=UTC).isoformat(), "available": True},
+            ]
+        },
+    }
+
+
+async def test_availability_calendar_shows_booked_windows(hass, mock_config_entry) -> None:
+    """A favorite's booked windows appear as calendar events."""
+    calendar = _avail_calendar(mock_config_entry, _booked_data())
     assert "53237" in (calendar.name or "")
     assert calendar.event is not None
-    assert calendar.event.summary.endswith("available")
+    assert calendar.event.summary.endswith("booked")
     events = await calendar.async_get_events(
         hass,
-        datetime.fromtimestamp(base - 3600, tz=UTC),
-        datetime.fromtimestamp(base + 7200, tz=UTC),
+        datetime.fromtimestamp(1795026600 - 86400, tz=UTC),
+        datetime.fromtimestamp(1795026600 + 86400 * 14, tz=UTC),
     )
     assert len(events) == 1
-    assert events[0].uid.startswith("53237-")
+    assert events[0].uid.startswith("53237-booked-")
 
 
-async def test_availability_calendar_empty_without_vehicle(hass, mock_config_entry) -> None:
-    """No vehicle data means no windows and a fallback name."""
+async def test_availability_calendar_empty_without_schedule(hass, mock_config_entry) -> None:
+    """No schedule means no windows and a fallback name."""
     calendar = _avail_calendar(mock_config_entry, {"vehicles": []})
     assert calendar.event is None
-    assert calendar.name == "Availability (53237)"
+    assert calendar.name == "Bookings (53237)"
+    assert _avail_calendar(mock_config_entry, None).event is None
     assert (
         await calendar.async_get_events(
             hass,

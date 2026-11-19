@@ -24,15 +24,17 @@ def _as_timestamp(value: date | datetime) -> float:
     return datetime(value.year, value.month, value.day, tzinfo=UTC).timestamp()
 
 
-def _merge_slots(slots: list[dict[str, Any]]) -> list[tuple[int, int]]:
-    """Merge consecutive available 15-minute slots into (start, end) windows.
+def _merge_slots(slots: list[dict[str, Any]], *, available: bool) -> list[tuple[int, int]]:
+    """Merge consecutive 15-minute slots into (start, end) windows.
 
-    Slot times are ISO-8601 strings (see coordinator); entries that do not
-    parse are skipped.
+    Selects slots whose ``available`` flag matches, so the same helper
+    builds free windows (``True``) and booked windows (``False``).
+    Slot times are ISO-8601 strings (see coordinator); entries that do
+    not parse are skipped.
     """
     times: list[int] = []
     for slot in slots:
-        if not isinstance(slot, dict) or slot.get("available") is not True:
+        if not isinstance(slot, dict) or slot.get("available") is not available:
             continue
         raw = slot.get("time")
         try:
@@ -153,7 +155,12 @@ class EnterpriseCarClubCalendar(CoordinatorEntity[EnterpriseCarClubCoordinator],
 
 
 class EnterpriseCarClubAvailabilityCalendar(CoordinatorEntity[EnterpriseCarClubCoordinator], CalendarEntity):
-    """Free windows of one favorite vehicle, as calendar events."""
+    """Booked windows of one favorite vehicle, as calendar events.
+
+    Shows when the vehicle is unavailable (booked by someone else), so
+    free time is everything else on the calendar. Schedules cover the
+    ``calendar_days`` options window.
+    """
 
     _attr_has_entity_name = True
 
@@ -168,30 +175,38 @@ class EnterpriseCarClubAvailabilityCalendar(CoordinatorEntity[EnterpriseCarClubC
             "manufacturer": "Enterprise Car Club",
         }
 
-    def _vehicle(self) -> dict[str, Any] | None:
+    def _slots(self) -> list[dict[str, Any]]:
         data = self.coordinator.data
         if not data:
-            return None
-        for vehicle in data.get("vehicles", []):
-            if isinstance(vehicle, dict) and vehicle.get("stack_id") == self._stack_id:
-                return vehicle
-        return None
+            return []
+        schedules = data.get("schedules")
+        if isinstance(schedules, dict):
+            slots = schedules.get(self._stack_id)
+            if isinstance(slots, list):
+                return [s for s in slots if isinstance(s, dict)]
+        return []
+
+    def _vehicle_name(self) -> str:
+        data = self.coordinator.data
+        vehicles = data.get("vehicles") if isinstance(data, dict) else None
+        if isinstance(vehicles, list):
+            for vehicle in vehicles:
+                if isinstance(vehicle, dict) and vehicle.get("stack_id") == self._stack_id:
+                    return vehicle_display_name(vehicle, self._stack_id)
+        return f"Favorite {self._stack_id}"
 
     def _windows(self) -> list[CalendarEvent]:
-        vehicle = self._vehicle()
-        if not vehicle:
+        slots = self._slots()
+        if not slots:
             return []
-        slots = vehicle.get("timeslots")
-        if not isinstance(slots, list):
-            return []
-        name = vehicle_display_name(vehicle, self._stack_id)
+        name = self._vehicle_name()
         events = []
-        for start_ts, end_ts in _merge_slots(slots):
+        for start_ts, end_ts in _merge_slots(slots, available=False):
             events.append(
                 CalendarEvent(
-                    uid=f"{self._stack_id}-{start_ts}",
-                    summary=f"{name} available",
-                    description=f"Bookable window for {name}",
+                    uid=f"{self._stack_id}-booked-{start_ts}",
+                    summary=f"{name} booked",
+                    description=f"{name} is booked out",
                     start=datetime.fromtimestamp(start_ts, tz=UTC),
                     end=datetime.fromtimestamp(end_ts, tz=UTC),
                 )
@@ -200,7 +215,7 @@ class EnterpriseCarClubAvailabilityCalendar(CoordinatorEntity[EnterpriseCarClubC
 
     @property
     def event(self) -> CalendarEvent | None:
-        """Return the next upcoming free window, if any."""
+        """Return the current or next booking, if any."""
         now = datetime.now(tz=UTC).timestamp()
         upcoming = [e for e in self._windows() if _as_timestamp(e.end) > now]
         return upcoming[0] if upcoming else None
@@ -208,15 +223,15 @@ class EnterpriseCarClubAvailabilityCalendar(CoordinatorEntity[EnterpriseCarClubC
     @property
     def name(self) -> str | None:
         """Name follows the vehicle so each favorite is distinguishable."""
-        vehicle = self._vehicle()
-        if vehicle is None:
-            return f"Availability ({self._stack_id})"
-        return f"{vehicle_display_name(vehicle, self._stack_id)} availability"
+        vehicle_name = self._vehicle_name()
+        if vehicle_name.startswith("Favorite "):
+            return f"Bookings ({self._stack_id})"
+        return f"{vehicle_name} bookings"
 
     async def async_get_events(
         self, hass: HomeAssistant, start_date: datetime, end_date: datetime
     ) -> list[CalendarEvent]:
-        """Return free windows overlapping the requested range."""
+        """Return booked windows overlapping the requested range."""
         start_ts = start_date.timestamp()
         end_ts = end_date.timestamp()
         return [

@@ -17,12 +17,16 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from enterprise_carclub import AuthError, Client, ClientError, summarize_stack
 
 from .const import (
+    CONF_CALENDAR_DAYS,
+    CONF_FAVORITE_STACK_IDS,
     CONF_MARKET_ID,
     CONF_WINDOW_HOURS,
+    DEFAULT_CALENDAR_DAYS,
     DEFAULT_MARKET_ID,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_WINDOW_HOURS,
     DOMAIN,
+    MAX_CALENDAR_DAYS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -125,6 +129,30 @@ class EnterpriseCarClubCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             summaries.append(summary)
         return summaries
 
+    async def _fetch_schedules(self, client: Client, favorite_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        """Fetch multi-day timeslot schedules for favorite stacks only.
+
+        One call per favorite keeps payloads small; the nearby search
+        covers the short window while favorites get the full ``calendar_days``
+        horizon for their booked-out calendars.
+        """
+        days = self.entry.options.get(CONF_CALENDAR_DAYS, DEFAULT_CALENDAR_DAYS)
+        try:
+            days = max(1, min(int(days), MAX_CALENDAR_DAYS))
+        except TypeError, ValueError:
+            days = DEFAULT_CALENDAR_DAYS
+        start = next_quarter_epoch()
+        end = start + days * 86400
+        schedules: dict[str, list[dict[str, Any]]] = {}
+        for stack_id in favorite_ids:
+            try:
+                schedules[stack_id] = await client.async_get_stack_timeslots(stack_id, start_time=start, end_time=end)
+            except AuthError:
+                raise
+            except ClientError as err:
+                _LOGGER.debug("Timeslot fetch failed for %s: %s", stack_id, err)
+        return schedules
+
     async def _fetch(self, client: Client) -> dict[str, Any]:
         reservations = await client.async_get_current_and_future()
         messages = await client.async_get_driver_messages()
@@ -136,10 +164,14 @@ class EnterpriseCarClubCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             end_time=params["end_time"],
             market_id=params["market_id"],
         )
+        favorites = self.entry.options.get(CONF_FAVORITE_STACK_IDS, [])
+        favorite_ids = [f for f in favorites if isinstance(f, str)]
+        schedules = await self._fetch_schedules(client, favorite_ids)
         return {
             "reservations": reservations,
             "messages": messages,
             "vehicles": self._summarize_stacks(stacks, reservations),
+            "schedules": schedules,
             "search_params": params,
             "source": "cloud",
         }

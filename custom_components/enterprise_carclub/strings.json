@@ -53,6 +53,7 @@
           "latitude": "Search latitude",
           "longitude": "Search longitude",
           "window_hours": "Search window (hours)",
+          "calendar_days": "Booked-calendar horizon (days)",
           "market_id": "Market ID",
           "favorite_stack_ids": "Favorite vehicles"
         }
