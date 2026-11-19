@@ -11,6 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .binary_sensor import vehicle_display_name
 from .const import DOMAIN
 from .coordinator import EnterpriseCarClubCoordinator, isoformat_epoch
 
@@ -153,10 +154,13 @@ class EnterpriseCarClubAvailableVehiclesSensor(_BaseSensor):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Expose per-vehicle summaries plus size-class and fuel breakdowns.
+        """Expose compact per-vehicle rows plus size-class and fuel breakdowns.
 
-        Full timeslot lists stay out of state attributes (recorder 16 kB
-        limit) — use the ``check_availability`` service for schedules.
+        State attributes must stay well under the recorder's 16 kB limit,
+        so each vehicle is a slim row — display name, distance, class, fuel,
+        next free slot and reservation id. Full detail (photos, directions,
+        schedules) lives on the device tracker and the ``check_availability``
+        service.
         """
         available = self._available()
         if available is None:
@@ -164,17 +168,27 @@ class EnterpriseCarClubAvailableVehiclesSensor(_BaseSensor):
         size_classes = Counter(v.get("size_class", "unknown") for v in available)
         fuels = Counter(v.get("fuel", "unknown") for v in available)
         vehicles = []
-        # Long-form text (directions, usage notes) stays out of state: the
-        # recorder drops attributes over 16 kB. Full detail is one click
-        # away via the check_availability service and device attributes.
-        drop_keys = {"timeslots", "wayfinding", "instructions", "usage_information"}
         for vehicle in available:
-            summary = {k: v for k, v in vehicle.items() if k not in drop_keys}
+            stack_id = vehicle.get("stack_id")
+            reservation = vehicle.get("reservation")
+            reservation_id = reservation.get("id") if isinstance(reservation, dict) else None
             slots = vehicle.get("timeslots")
-            if isinstance(slots, list):
-                summary["slot_count"] = len(slots)
-                summary["free_slot_count"] = sum(1 for s in slots if isinstance(s, dict) and s.get("available"))
-            vehicles.append(summary)
+            free_slots = (
+                sum(1 for s in slots if isinstance(s, dict) and s.get("available")) if isinstance(slots, list) else 0
+            )
+            vehicles.append(
+                {
+                    "stack_id": stack_id,
+                    "name": vehicle_display_name(vehicle, stack_id) if isinstance(stack_id, str) else None,
+                    "distance_m": vehicle.get("distance_m"),
+                    "size_class": vehicle.get("size_class"),
+                    "fuel": vehicle.get("fuel"),
+                    "next_free_time": vehicle.get("next_free_time"),
+                    "free_slot_count": free_slots,
+                    "reserved_by_you": reservation_id is not None,
+                    "reservation_id": reservation_id,
+                }
+            )
         return {
             "vehicles": vehicles,
             "by_size_class": dict(size_classes),

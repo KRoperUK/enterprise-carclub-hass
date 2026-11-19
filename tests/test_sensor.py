@@ -59,9 +59,37 @@ def test_available_vehicles_sensor_counts_good_only(mock_config_entry) -> None:
     assert attributes["by_size_class"] == {"small": 1}
     assert attributes["by_fuel"] == {"petrol": 1}
     assert len(attributes["vehicles"]) == 1
-    assert "timeslots" not in attributes["vehicles"][0]
-    assert attributes["vehicles"][0]["slot_count"] == 2
-    assert attributes["vehicles"][0]["free_slot_count"] == 1
+    row = attributes["vehicles"][0]
+    assert row["name"] == "Peugeot 208, MediaCityUK (53237)"
+    assert row["free_slot_count"] == 1
+    assert row["reserved_by_you"] is False
+    assert "timeslots" not in row
+    assert "wayfinding" not in row
+
+
+def test_vehicle_rows_stay_under_recorder_limit(mock_config_entry) -> None:
+    """Thirty verbose vehicles must serialize well under the 16 kB cap."""
+    import json
+
+    long_desc = "x" * 300
+    vehicles = [
+        dict(
+            VEHICLE,
+            stack_id=str(i),
+            description=long_desc,
+            lot_description="A very long street name, Somewhere, AB1 2CD",
+            wayfinding="y" * 2000,
+            instructions="z" * 500,
+        )
+        for i in range(30)
+    ]
+    sensor = _build(
+        EnterpriseCarClubAvailableVehiclesSensor,
+        mock_config_entry,
+        {"reservations": [], "messages": [], "vehicles": vehicles, "search_params": {}},
+    )
+    payload = json.dumps(sensor.extra_state_attributes)
+    assert len(payload.encode()) < 8192
 
 
 def test_unique_id_and_device_info(mock_config_entry) -> None:
