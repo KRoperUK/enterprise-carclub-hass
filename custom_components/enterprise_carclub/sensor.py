@@ -164,8 +164,12 @@ class EnterpriseCarClubAvailableVehiclesSensor(_BaseSensor):
         size_classes = Counter(v.get("size_class", "unknown") for v in available)
         fuels = Counter(v.get("fuel", "unknown") for v in available)
         vehicles = []
+        # Long-form text (directions, usage notes) stays out of state: the
+        # recorder drops attributes over 16 kB. Full detail is one click
+        # away via the check_availability service and device attributes.
+        drop_keys = {"timeslots", "wayfinding", "instructions", "usage_information"}
         for vehicle in available:
-            summary = {k: v for k, v in vehicle.items() if k != "timeslots"}
+            summary = {k: v for k, v in vehicle.items() if k not in drop_keys}
             slots = vehicle.get("timeslots")
             if isinstance(slots, list):
                 summary["slot_count"] = len(slots)
