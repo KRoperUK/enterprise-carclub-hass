@@ -8,6 +8,13 @@
           "username": "Member ID",
           "password": "Password"
         }
+      },
+      "reauth": {
+        "title": "Re-authenticate Enterprise Car Club",
+        "description": "The password for {username} no longer works. Enter the new password.",
+        "data": {
+          "password": "Password"
+        }
       }
     },
     "error": {
@@ -17,6 +24,63 @@
     },
     "abort": {
       "already_configured": "Account is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Search and favorites",
+        "description": "Where to search, how far ahead to look, and which vehicles to watch as favorites.",
+        "data": {
+          "latitude": "Search latitude",
+          "longitude": "Search longitude",
+          "window_hours": "Search window (hours)",
+          "market_id": "Market ID",
+          "favorite_stack_ids": "Favorite vehicles"
+        }
+      }
+    }
+  },
+  "services": {
+    "check_availability": {
+      "name": "Check vehicle availability",
+      "description": "Returns availability timeslots for one vehicle stack in any future window.",
+      "fields": {
+        "stack_id": {
+          "name": "Stack ID",
+          "description": "Vehicle stack to check."
+        },
+        "start": {
+          "name": "Window start",
+          "description": "Start of the window to check."
+        },
+        "end": {
+          "name": "Window end",
+          "description": "End of the window to check."
+        }
+      }
+    },
+    "book_vehicle": {
+      "name": "Book vehicle",
+      "description": "Creates a real, chargeable reservation.",
+      "fields": {
+        "stack_id": {
+          "name": "Stack ID",
+          "description": "Vehicle stack to book."
+        },
+        "start": {
+          "name": "Trip start",
+          "description": "Reservation start."
+        },
+        "end": {
+          "name": "Trip end",
+          "description": "Reservation end."
+        },
+        "memo": {
+          "name": "Memo",
+          "description": "Optional note stored on the reservation."
+        }
+      }
     }
   }
 }

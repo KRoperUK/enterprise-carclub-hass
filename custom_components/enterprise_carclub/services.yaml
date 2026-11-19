@@ -1,0 +1,50 @@
+check_availability:
+  name: Check vehicle availability
+  description: Returns availability timeslots for one vehicle stack in any future window.
+  fields:
+    stack_id:
+      name: Stack ID
+      description: Vehicle stack to check (select from a vehicle's attributes first).
+      required: true
+      selector:
+        text: {}
+    start:
+      name: Window start
+      description: Start of the window to check.
+      required: true
+      selector:
+        datetime: {}
+    end:
+      name: Window end
+      description: End of the window to check.
+      required: true
+      selector:
+        datetime: {}
+book_vehicle:
+  name: Book vehicle
+  description: Creates a real, chargeable reservation. Times must fall on 15-minute boundaries.
+  fields:
+    stack_id:
+      name: Stack ID
+      description: Vehicle stack to book.
+      required: true
+      selector:
+        text: {}
+    start:
+      name: Trip start
+      description: Reservation start.
+      required: true
+      selector:
+        datetime: {}
+    end:
+      name: Trip end
+      description: Reservation end.
+      required: true
+      selector:
+        datetime: {}
+    memo:
+      name: Memo
+      description: Optional note stored on the reservation.
+      required: false
+      selector:
+        text: {}

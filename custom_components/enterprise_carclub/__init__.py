@@ -1,20 +1,22 @@
-"""Enterprise Car Club Home Assistant integration (blueprint skeleton)."""
+"""Enterprise Car Club Home Assistant integration."""
 
 from __future__ import annotations
-
-import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
 from .coordinator import EnterpriseCarClubCoordinator
+from .services import async_register_services
 
-_LOGGER = logging.getLogger(__name__)
-
-PLATFORMS: list[Platform] = [Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.DEVICE_TRACKER]
 
 type EnterpriseCarClubConfigEntry = ConfigEntry[EnterpriseCarClubCoordinator]
+
+
+async def _update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload when options (search area, favorites) change."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: EnterpriseCarClubConfigEntry) -> bool:
@@ -22,6 +24,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: EnterpriseCarClubConfigE
     coordinator = EnterpriseCarClubCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
+    async_register_services(hass)
+    entry.async_on_unload(entry.add_update_listener(_update_listener))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
