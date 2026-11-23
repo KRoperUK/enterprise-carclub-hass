@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 from custom_components.enterprise_carclub.calendar import (
@@ -12,11 +12,13 @@ from custom_components.enterprise_carclub.calendar import (
 
 
 def _reservation(**overrides: object) -> dict:
+    start = datetime.now(tz=UTC) + timedelta(hours=1)
+    end = start + timedelta(hours=4)
     payload: dict = {
         "id": "14566233",
         "status": "normal",
-        "start_timestamp": 1795107600,
-        "end_timestamp": 1795122000,
+        "start_timestamp": int(start.timestamp()),
+        "end_timestamp": int(end.timestamp()),
         "vehicle_stack": {
             "make_model": "Ford Transit Custom EV",
             "lot_description": "Blossom Street, Ancoats, M4 6AJ",
@@ -35,12 +37,13 @@ def _calendar(entry, data) -> EnterpriseCarClubCalendar:
 
 def test_event_shape_from_reservation() -> None:
     """A reservation maps to a calendar event with summary and location."""
-    event = _as_event(_reservation())
+    reservation = _reservation()
+    event = _as_event(reservation)
     assert event is not None
     assert event.uid == "14566233"
     assert "Ford Transit" in event.summary
     assert event.location == "Blossom Street, Ancoats, M4 6AJ"
-    assert event.start.year == 2026
+    assert event.start == datetime.fromtimestamp(reservation["start_timestamp"], tz=UTC)
 
 
 def test_event_skips_unparsable_reservations() -> None:
@@ -60,11 +63,8 @@ async def test_get_events_filters_by_range(hass, mock_config_entry) -> None:
         end.replace(hour=23, minute=59),
     )
     assert len(in_range) == 1
-    out_of_range = await calendar.async_get_events(
-        hass,
-        datetime(2026, 11, 23, 18, 0, tzinfo=UTC),
-        datetime(2026, 11, 23, 22, 0, tzinfo=UTC),
-    )
+    far = start + timedelta(days=10)
+    out_of_range = await calendar.async_get_events(hass, far, far + timedelta(hours=4))
     assert out_of_range == []
 
 
