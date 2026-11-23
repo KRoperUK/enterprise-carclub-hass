@@ -86,7 +86,7 @@ jobs:
       - uses: hacs/action@d556e736723344f83838d08488c983a15381059a # 22.5.0
         with:
           category: integration
-      - uses: home-assistant/actions/hassfest@master
+      - uses: home-assistant/actions/hassfest@07f46fd2e19967768b5fd3000f91f857452b767c # master
 
   # Semver pre-releases — see docs/pre-releases.md (ported from dimplex-controller-hass).
   dev-release:
@@ -108,10 +108,10 @@ jobs:
           fetch-depth: 0
       - name: Compute next version
         id: nextver
-        uses: TriPSs/conventional-changelog-action@v6
+        uses: TriPSs/conventional-changelog-action@ee43def3241429afddab215ba89090cbf64fb45c # v6
         with:
           github-token: ${{ github.token }}
-          version-file: custom_components/example/manifest.json
+          version-file: custom_components/enterprise_carclub/manifest.json
           version-path: version
           tag-prefix: v
           preset: conventionalcommits
@@ -133,7 +133,7 @@ jobs:
           RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           if [ "$SKIPPED" = "true" ] || [ -z "$NEXT_VERSION" ]; then
-            VERSION=$(jq -r .version custom_components/example/manifest.json)
+            VERSION=$(jq -r .version custom_components/enterprise_carclub/manifest.json)
           else
             VERSION="$NEXT_VERSION"
           fi
@@ -186,8 +186,8 @@ jobs:
             echo "- **Base commit:** \`${BASE_SHA}\`"
             echo "- **Release tree:** \`${SYNTHETIC_SHA}\`"
           } > pr-dev-notes.md
-          bash scripts/package-hacs-zip.sh example.zip
-          gh release create "$TAG" --prerelease --title "$TAG" --target "$SYNTHETIC_SHA" --notes-file pr-dev-notes.md example.zip
+          bash scripts/package-hacs-zip.sh enterprise_carclub.zip
+          gh release create "$TAG" --prerelease --title "$TAG" --target "$SYNTHETIC_SHA" --notes-file pr-dev-notes.md enterprise_carclub.zip
           bash scripts/verify-dev-release-target.sh
           echo "available=true" >> "$GITHUB_OUTPUT"
       - name: Label PR as dev-release-cut
@@ -217,10 +217,10 @@ jobs:
           fetch-depth: 0
       - name: Compute next version
         id: nextver
-        uses: TriPSs/conventional-changelog-action@v6
+        uses: TriPSs/conventional-changelog-action@ee43def3241429afddab215ba89090cbf64fb45c # v6
         with:
           github-token: ${{ github.token }}
-          version-file: custom_components/example/manifest.json
+          version-file: custom_components/enterprise_carclub/manifest.json
           version-path: version
           tag-prefix: v
           preset: conventionalcommits
@@ -239,7 +239,7 @@ jobs:
           NEXT_VERSION: ${{ steps.nextver.outputs.version }}
         run: |
           if [ "$SKIPPED" = "true" ] || [ -z "$NEXT_VERSION" ]; then
-            VERSION=$(jq -r .version custom_components/example/manifest.json)
+            VERSION=$(jq -r .version custom_components/enterprise_carclub/manifest.json)
           else
             VERSION="$NEXT_VERSION"
           fi
@@ -291,6 +291,6 @@ jobs:
           } > rc-notes.md
           git tag -f "$TAG" "$SYNTHETIC_SHA"
           git push origin "refs/tags/${TAG}"
-          bash scripts/package-hacs-zip.sh example.zip
-          gh release create "$TAG" --prerelease --title "$TAG" --target "$SYNTHETIC_SHA" --notes-file rc-notes.md example.zip
+          bash scripts/package-hacs-zip.sh enterprise_carclub.zip
+          gh release create "$TAG" --prerelease --title "$TAG" --target "$SYNTHETIC_SHA" --notes-file rc-notes.md enterprise_carclub.zip
           bash scripts/verify-dev-release-target.sh
