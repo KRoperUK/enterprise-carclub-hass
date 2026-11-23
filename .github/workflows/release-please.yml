@@ -1,4 +1,4 @@
-name: release-please
+name: Release Please
 
 on:
   push:
@@ -8,12 +8,90 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: googleapis/release-please-action@v5
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ github.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # Upload the HACS zip asset to the release so HACS can install via
+      # zip_release mode. This must happen before pruning dev builds so the
+      # stable release is immediately installable.
+      - name: Checkout code for zip packaging
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Upload HACS zip asset
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          bash scripts/package-hacs-zip.sh enterprise_carclub.zip
+          gh release upload "$TAG" enterprise_carclub.zip --clobber
+
+      # Regression guard: hacs.json sets zip_release: true, so a release
+      # missing enterprise_carclub.zip is uninstallable for every HACS user.
+      # Fail the release loudly if the upload step is ever dropped or renamed.
+      - name: Verify HACS zip asset is attached
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          assets=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+          echo "Assets on ${TAG}:"
+          printf '%s\n' "$assets"
+          if ! printf '%s\n' "$assets" | grep -Fxq "enterprise_carclub.zip"; then
+            echo "::error::Release ${TAG} is missing enterprise_carclub.zip — HACS installs would fail."
+            exit 1
+          fi
+          echo "Verified enterprise_carclub.zip is attached to ${TAG}."
+
+      # A published release supersedes every dev build. Prune them all so only
+      # the real release remains, covering the current tag schemes
+      # (vX.Y.Z-rc.N, vX.Y.Z-pr.P.R) and the legacy dev-* scheme.
+      - name: Prune all dev pre-releases on a real release
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # Delete a release and its tag ref, tolerating an already-missing tag:
+          # drop the release, then remove the tag ref only if it still exists so
+          # a shared/removed ref can't 404 and fail the prune under `bash -e`.
+          delete_release_and_tag() {
+            tag="$1"
+            gh release delete "$tag" --yes 2>/dev/null || true
+            if gh api "repos/${GH_REPO}/git/refs/tags/${tag}" >/dev/null 2>&1; then
+              gh api --method DELETE "repos/${GH_REPO}/git/refs/tags/${tag}" >/dev/null \
+                && echo "Deleted tag ref ${tag}" \
+                || echo "Warning: could not delete tag ref ${tag}"
+            else
+              echo "Tag ${tag} already absent — nothing to clean up"
+            fi
+          }
+
+          echo "Release created; deleting all dev pre-releases (rc / pr / legacy dev-*)."
+          gh release list --limit 1000 --json tagName,isPrerelease \
+            --jq '.[] | select(.isPrerelease) | .tagName' \
+          | while read -r tag; do
+              case "$tag" in
+                dev-*) ;;
+                v[0-9]*.[0-9]*.[0-9]*-rc.*|v[0-9]*.[0-9]*.[0-9]*-pr.*) ;;
+                *) continue ;;
+              esac
+              delete_release_and_tag "$tag"
+            done
