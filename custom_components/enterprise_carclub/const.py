@@ -1,7 +1,7 @@
 """Constants for the enterprise_carclub integration."""
 
 DOMAIN = "enterprise_carclub"
-VERSION = "0.2.0"  # x-release-please-version
+VERSION = "0.2.0-pr.13.55b246a"  # x-release-please-version
 
 DEFAULT_SCAN_INTERVAL = 300
 
